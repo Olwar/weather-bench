@@ -15,12 +15,13 @@ same wall-clock moment, exactly like a user opening two weather apps side by sid
 Usage: python3 collect.py
 """
 import re
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from common import (
-    CITIES, OM_MODELS, get_db, http_get, http_json, fmi_simple,
+    CITIES, OM_MODELS, DATA_DIR, get_db, http_get, http_json, fmi_simple,
     fetch_obs, store_observations,
 )
 
@@ -109,14 +110,15 @@ def collect_fmi_edited(con, run_time):
                 place=city["fmi_place"], parameters=",".join(FMI_FC_PARAMS), timestep=60,
                 starttime=start, endtime=end,
             )
-            if not rows:
-                raise RuntimeError("0 rows parsed")
+            stored = [("fmi_edited", city["key"], run_time, t, FMI_FC_PARAMS[p], v)
+                      for (t, p, v) in rows if p in FMI_FC_PARAMS]
+            if not stored:
+                raise RuntimeError(f"0 rows stored (raw rows: {len(rows)}; param rename?)")
             con.executemany(
                 "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
-                [("fmi_edited", city["key"], run_time, t, FMI_FC_PARAMS[p], v)
-                 for (t, p, v) in rows if p in FMI_FC_PARAMS],
+                stored,
             )
-            log(con, run_time, "fmi_edited", city["key"], len(rows))
+            log(con, run_time, "fmi_edited", city["key"], len(stored))
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "fmi_edited", city["key"], 0, str(e))
         time.sleep(0.4)
@@ -134,6 +136,7 @@ def collect_open_meteo(con, run_time):
                 f"&models={models}&forecast_days=16"
             )
             blocks = data if isinstance(data, list) else [data]
+            per_mv = {(m, v): 0 for m in OM_MODELS for v in OM_VARS.values()}
             n = 0
             for block in blocks:
                 hourly = block.get("hourly", {})
@@ -156,9 +159,13 @@ def collect_open_meteo(con, run_time):
                         "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
                         rows,
                     )
+                    per_mv[(model, var)] += len(rows)
                     n += len(rows)
-            if n == 0:
-                raise RuntimeError(f"0 rows parsed (error response or key change: {str(data)[:150]})")
+            # A single dead model/var must not be masked by the healthy ones
+            # (that is exactly how the GraphCast feed died).
+            dead = [f"{m}/{v}" for (m, v), c in per_mv.items() if c == 0]
+            if dead:
+                raise RuntimeError(f"empty model/var feeds: {', '.join(dead)}")
             log(con, run_time, "open_meteo", city["key"], n)
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "open_meteo", city["key"], 0, str(e))
@@ -186,7 +193,9 @@ def collect_obs(con, run_time):
 
 
 def main():
-    run_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00Z")
+    # Minute precision: exact leads, no elapsed-hour leakage into lead 0, and two
+    # runs in the same hour stay distinct snapshots instead of merging.
+    run_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     con = get_db()
     print(f"collect run {run_time}")
     collect_foreca(con, run_time)
@@ -201,8 +210,24 @@ def main():
     total = con.execute(
         "SELECT coalesce(sum(rows),0) FROM collect_log WHERE run_time=?", (run_time,)
     ).fetchone()[0]
+    backup_daily(con)
     print(f"done: {total} rows stored, {errs} errors")
     con.close()
+    if errs:
+        sys.exit(1)  # loud failure so the scheduler/session notices
+
+
+def backup_daily(con):
+    """One consistent DB copy per UTC day, keep the last 7 - the accrued
+    competitor snapshots are unrecoverable if the live file is lost."""
+    bdir = DATA_DIR / "backups"
+    bdir.mkdir(exist_ok=True)
+    path = bdir / f"bench-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sqlite"
+    if not path.exists():
+        con.commit()
+        con.execute(f"VACUUM INTO '{path}'")
+        for old in sorted(bdir.glob("bench-*.sqlite"))[:-7]:
+            old.unlink()
 
 
 if __name__ == "__main__":

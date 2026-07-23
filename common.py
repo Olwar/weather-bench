@@ -64,17 +64,36 @@ def http_json(url: str) -> dict:
     return json.loads(http_get(url))
 
 
-def fmi_simple(storedquery: str, **params) -> list[tuple[str, str, float]]:
-    """Query an FMI WFS ::simple stored query. Returns [(utc_iso, param_name, value)]."""
+def fmi_simple(storedquery: str, expect_pos=None, **params) -> list[tuple[str, str, float]]:
+    """Query an FMI WFS ::simple stored query. Returns [(utc_iso, param_name, value)].
+
+    expect_pos=(lat, lon): assert the responding station is the pinned one -
+    place-name resolution drifting to a different station mid-benchmark would
+    silently corrupt the verification truth.
+    """
     qs = urllib.parse.urlencode(params)  # place names like "sodankylä" need encoding
     url = (
         "https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature"
         f"&storedquery_id={storedquery}&{qs}"
     )
     xml = http_get(url)
-    ns = {"BsWfs": "http://xml.fmi.fi/schema/wfs/2.0"}
+    ns = {
+        "BsWfs": "http://xml.fmi.fi/schema/wfs/2.0",
+        "gml": "http://www.opengis.net/gml/3.2",
+    }
+    root = ET.fromstring(xml)
     out = []
-    for el in ET.fromstring(xml).iter("{http://xml.fmi.fi/schema/wfs/2.0}BsWfsElement"):
+    checked = False
+    for el in root.iter("{http://xml.fmi.fi/schema/wfs/2.0}BsWfsElement"):
+        if expect_pos is not None and not checked:
+            pos = el.find("BsWfs:Location/gml:Point/gml:pos", ns)
+            if pos is not None:
+                lat, lon = (float(x) for x in pos.text.split())
+                if abs(lat - expect_pos[0]) > 0.02 or abs(lon - expect_pos[1]) > 0.03:
+                    raise RuntimeError(
+                        f"station drift: got {lat},{lon}, expected {expect_pos}"
+                    )
+                checked = True
         t = el.find("BsWfs:Time", ns).text
         p = el.find("BsWfs:ParameterName", ns).text
         v = el.find("BsWfs:ParameterValue", ns).text
@@ -114,8 +133,10 @@ def get_db() -> sqlite3.Connection:
 
 
 def store_observations(con: sqlite3.Connection, city: str, rows: list[tuple[str, str, float]]):
+    # OR REPLACE: the 166h re-fetch window lets FMI's later QC corrections
+    # overwrite provisional values - claims verify against final QC'd data.
     con.executemany(
-        "INSERT OR IGNORE INTO observations(city, time, var, value) VALUES(?,?,?,?)",
+        "INSERT OR REPLACE INTO observations(city, time, var, value) VALUES(?,?,?,?)",
         [(city, t, var, v) for (t, var, v) in rows],
     )
 
@@ -128,6 +149,7 @@ def fetch_obs(city: dict, start_utc: str, end_utc: str) -> list[tuple[str, str, 
     """Hourly (top-of-hour) temperature/wind/precip observations from the city's FMI station."""
     rows = fmi_simple(
         "fmi::observations::weather::simple",
+        expect_pos=(city["lat"], city["lon"]),
         place=city["fmi_place"], parameters=",".join(OBS_PARAMS), timestep=60,
         starttime=start_utc, endtime=end_utc,
     )

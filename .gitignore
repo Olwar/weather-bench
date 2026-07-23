@@ -1,2 +1,5 @@
 data/bench.sqlite
+data/backups/
 __pycache__/
+data/bench.sqlite-wal
+data/bench.sqlite-shm

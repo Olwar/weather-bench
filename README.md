@@ -1,36 +1,53 @@
 # weather-bench
 
-Forecast verification for Finland: do the new AI weather models (ECMWF AIFS) beat
-the incumbents' products (Foreca, Ilmatieteen laitos) and the physics models they
+Forecast verification for Finland: do the new AI weather models (ECMWF AIFS) and
+the open pipeline a solo developer would ship (Open-Meteo best_match) beat the
+incumbents' products (Foreca, Ilmatieteen laitos) and the physics models they
 are built on (ECMWF IFS)?
 
-Verification truth: hourly 2 m temperature from six FMI observation stations
-(Helsinki Kaisaniemi, Tampere, Oulu, Rovaniemi, Turku, Jyväskylä), via FMI open data.
-All forecast sources are requested/interpolated at the exact station coordinates.
+Verification truth: hourly 2 m temperature, wind and precipitation from **14 FMI
+observation stations** (Helsinki Kaisaniemi, Tampere, Oulu, Rovaniemi, Turku,
+Jyväskylä, Vaasa, Kuopio, Joensuu, Lappeenranta, Pori, Kajaani, Sodankylä,
+Mariehamn - all Finnish climate zones), via FMI open data. All forecast sources
+are requested/interpolated at the exact station coordinates; the station
+identity is asserted on every fetch (drift raises an error).
+
+## Pre-registered claim protocol (fixed 2026-07-23, before data accrual)
+
+- **Primary endpoint**: hourly 2 m temperature MAE, leads 1-7 pooled,
+  `ecmwf_aifs025_single` vs `foreca`, matched pairs, tested at alpha=0.05.
+- All other pairwise cells (best_match, fmi_edited, per-lead splits) are
+  **secondary** and Holm-corrected.
+- Inference: circular moving-block bootstrap over consecutive local target dates
+  (block length 5; sensitivity reported at 3/7) - accounts for synoptic
+  persistence across adjacent days. Point estimate is the empirical matched-pair
+  MAE difference; the bootstrap provides interval and p-value only.
+- No "significant" verdict prints before 20 distinct target dates.
+- A defensible public claim is **narrow**: "over [period], at [the 14 named FMI
+  stations], for lead days 1-7, X had Z% lower hourly 2 m temperature MAE than
+  Y's published forecast (95% CI, pre-registered endpoint)" - not "more accurate
+  forecasts for Finland" in general.
 
 ## Two experiments
 
 ### 1. Retrospective (`retro.py`) - runnable any time
 Open-Meteo's previous-runs archive stores what each model forecast N days ahead,
-as issued at the time. Scored against FMI observations over the past ~60 days.
-Covers models only (IFS, AIFS, MET Nordic day-1) - there is no public archive of
-Foreca's or FMI's *edited* past forecasts, hence experiment 2.
+as issued at the time. Scored against FMI observations over the past ~90 days on
+**matched samples** (a sample counts only where IFS, AIFS and best_match all
+have values; metno_nordic is day-1-only and scored on its own samples). Covers
+models only - there is no public archive of Foreca's or FMI's *edited* past
+forecasts, hence experiment 2. Each run wipes and refetches the retro table
+(descriptive, no significance testing - the prospective experiment is the
+claim-bearing one).
 
-Result 2026-07-23 (60 days, hourly t2m MAE °C, 6 cities pooled):
-
-| lead | AIFS (AI) | IFS (physics) | MET Nordic |
-|------|-----------|---------------|------------|
-| d1   | 1.05      | 1.06          | 1.23       |
-| d3   | 1.30      | 1.37          | -          |
-| d5   | 1.71      | 1.93          | -          |
-| d7   | 2.09      | 2.41          | -          |
-
-AIFS ≥ IFS at every lead; the edge grows with range (day 7: ~13% lower MAE,
-i.e. AIFS at day 7 ≈ IFS at day 6).
+Result 2026-07-23 (90 days, 14 cities, hourly t2m MAE °C): AIFS beats IFS at
+every lead; day 1: 1.11 vs 1.13, day 4: 1.52 vs 1.64, day 7: 2.17 vs 2.44
+(~13% lower MAE at day 7, i.e. AIFS day 7 ≈ IFS day 6).
 
 ### 2. Prospective head-to-head (`collect.py` + `score.py`) - accrues over weeks
 `collect.py` snapshots, per city, at the same wall-clock moment (like a user
-opening all the apps side by side):
+opening all the apps side by side; `run_time` has minute precision so reruns
+never merge):
 
 - **foreca** - two feeds: native daily tmin/tmax/rain, ~13 days
   (`api.foreca.net/data/daily/<id>.json`, the open endpoint their site uses;
@@ -39,47 +56,62 @@ opening all the apps side by side):
   pages (local-time keys, converted to UTC)
 - **fmi_edited** - FMI's human-curated hourly t2m/ws/rain1h, ~10 days
   (open WFS `fmi::forecast::edited::weather::scandinavia::point::simple`)
-- **ecmwf_ifs025 / ecmwf_aifs025_single / metno_nordic** - hourly t2m/ws/rain1h,
-  16 days requested (IFS/AIFS deliver ~15, MET Nordic ~2.5) via Open-Meteo,
-  wind in m/s
-- **obs** - last 48 h of station observations: t2m, ws (10-min avg), rain1h
-  (idempotent upsert)
+- **ecmwf_ifs025 / ecmwf_aifs025_single / metno_nordic / best_match** - hourly
+  t2m/ws/rain1h, 16 days requested (IFS/AIFS deliver ~15, MET Nordic ~2.5) via
+  Open-Meteo, wind in m/s; an empty model/var feed raises (a dead feed must not
+  be masked by healthy ones)
+- **obs** - last 166 h of station observations (idempotent upsert with
+  OR REPLACE so FMI's later QC corrections win; outages up to ~6 days self-heal)
 
-`score.py` reports MAE by lead day: hourly t2m (all sources incl. Foreca) and
-daily tmin/tmax. Daily values for hourly sources and observations are min/max
-over Europe/Helsinki local days; Foreca's native daily feed is scored separately
-as `foreca_daily`. Wind/precip boards can be added at reporting time - the data
-is in the DB from day one.
+`score.py` reports MAE by lead day (hourly t2m and wind), rain occurrence skill
+(POD/FAR/CSI at 0.1 mm/h), daily tmin/tmax/rain (derived over Europe/Helsinki
+local days), the pairwise inference table described above, and a quantization
+sensitivity board (all sources rounded to integers).
 
-Comparability caveats (state these with any published claim):
-- Foreca's numbers are for the *city* point (their geocoded coordinates), not
-  the FMI station point. Close in practice, but station-adjacent sources
+## Fairness / methodology notes (state these with any published claim)
+
+- **Station vs city point**: Foreca's numbers are for their geocoded city point,
+  not the FMI station point. Close in practice, but station-adjacent sources
   (FMI edited) have a small home advantage.
-- Foreca's public feeds are integer-quantized (whole degrees / whole m/s),
-  which structurally inflates their MAE by roughly +0.05-0.1 degC independent
-  of forecast skill. Their internal forecast is finer than what they publish -
-  the benchmark measures what a user of their site/app actually receives.
-- "Lead day" semantics differ slightly between experiments: retro uses
-  issuance-relative previous_dayN (per Open-Meteo archive semantics), while
-  prospective buckets hours [24N, 24N+24) after the snapshot moment. Do not
-  compare numbers across the two tables directly.
-- Day-0 daily scores are excluded: part of "today" has already happened at
+- **Quantization**: Foreca's public feeds are integer-quantized (whole degrees /
+  whole m/s), which structurally inflates their MAE by roughly +0.05-0.1 °C
+  independent of skill. The benchmark measures what their user actually
+  receives; the sensitivity board (everyone rounded) shows whether any
+  conclusion survives the objection.
+- **foreca_daily is a different predictand**: their native daily extremes are
+  true min/max; our obs-derived "extremes" are min/max of 24 hourly samples,
+  which understate the real range. `foreca_daily` is therefore shown for
+  curiosity but excluded from all claims; the like-for-like Foreca comparison
+  uses their hourly feed.
+- **Day-0 daily scores are excluded**: part of "today" has already happened at
   snapshot time, and several feeds include those elapsed hours as analysis.
+- **Rain day convention**: hour-ending accumulations are assigned to the local
+  date of (timestamp - 1h), so a "day" is a true calendar day. Foreca's hourly
+  rain field convention has not been independently verified - treat Foreca rain
+  boards as provisional.
+- **Wind predictand**: obs wind is a 10-min mean; model wind is effectively
+  instantaneous at the hour. Same for all sources, but disclose it.
+- **Lead-day semantics** differ between experiments: retro uses
+  issuance-relative previous_dayN; prospective buckets hours [24N, 24N+24)
+  after the snapshot moment. Do not compare numbers across the two tables.
 
 ## Running
 
 ```bash
-python3 retro.py [days]   # retrospective benchmark (default 60)
-python3 collect.py        # one prospective snapshot (~30 s; run every 6-12 h)
-python3 score.py          # score accrued snapshots (meaningful after ~2+ days)
+python3 retro.py [days]   # retrospective benchmark (default 90, max ~92)
+python3 collect.py        # one prospective snapshot (~1 min; run every 6-12 h;
+                          #   exits non-zero if any source/city failed)
+python3 score.py          # score accrued snapshots (meaningful after ~2+ days;
+                          #   significance gates open at 20 distinct days)
 ```
 
 Stdlib only, no venv. Data in `data/bench.sqlite` (tables: `forecasts`,
-`observations`, `retro_forecasts`, `collect_log`); results JSON alongside.
+`observations`, `retro_forecasts`, `collect_log`); results JSON alongside;
+daily rotating DB backups in `data/backups/` (last 7 kept).
 
 Collection cadence is handled inside the long-running Claude Code session via
-self-scheduled wakeups (target: collect every ~6 h). If the session dies, just
-run `collect.py` twice a day by hand or wire it to launchd (note: launchd cannot
+self-scheduled wakeups (target: collect every ~6 h). If the session dies, run
+`collect.py` twice a day by hand or wire it to launchd (note: launchd cannot
 read `~/Documents` due to TCC - copy the scripts to `~/Library` first, see the
 flagged-notifier pattern in the SocialHuman repo).
 

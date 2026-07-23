@@ -43,6 +43,50 @@
       }
     }
   },
+  "hourly_t2m_quantized": {
+    "fmi_edited": {
+      "0": {
+        "n": 14,
+        "mae": 0.486,
+        "bias": -0.086
+      }
+    },
+    "ecmwf_ifs025": {
+      "0": {
+        "n": 14,
+        "mae": 0.757,
+        "bias": -0.371
+      }
+    },
+    "ecmwf_aifs025_single": {
+      "0": {
+        "n": 14,
+        "mae": 0.971,
+        "bias": -0.086
+      }
+    },
+    "metno_nordic": {
+      "0": {
+        "n": 14,
+        "mae": 0.986,
+        "bias": 0.843
+      }
+    },
+    "foreca": {
+      "0": {
+        "n": 14,
+        "mae": 0.429,
+        "bias": -0.086
+      }
+    },
+    "best_match": {
+      "0": {
+        "n": 14,
+        "mae": 0.986,
+        "bias": 0.843
+      }
+    }
+  },
   "hourly_ws": {
     "foreca": {
       "0": {
@@ -143,5 +187,16 @@
     "ecmwf_aifs025_single__vs__fmi_edited": {},
     "best_match__vs__foreca": {},
     "best_match__vs__fmi_edited": {}
+  },
+  "config": {
+    "block_len": 5,
+    "min_days": 20,
+    "alpha": 0.05,
+    "primary": [
+      "ecmwf_aifs025_single",
+      "foreca",
+      "pooled_1_7"
+    ],
+    "n_boot": 2000
   }
 }
