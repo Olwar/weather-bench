@@ -51,9 +51,20 @@ over Europe/Helsinki local days; Foreca's native daily feed is scored separately
 as `foreca_daily`. Wind/precip boards can be added at reporting time - the data
 is in the DB from day one.
 
-Foreca comparability caveat: Foreca's numbers are for the *city* point
-(their geocoded coordinates), not the FMI station point. Close in practice,
-but station-adjacent sources (FMI edited) have a small home advantage.
+Comparability caveats (state these with any published claim):
+- Foreca's numbers are for the *city* point (their geocoded coordinates), not
+  the FMI station point. Close in practice, but station-adjacent sources
+  (FMI edited) have a small home advantage.
+- Foreca's public feeds are integer-quantized (whole degrees / whole m/s),
+  which structurally inflates their MAE by roughly +0.05-0.1 degC independent
+  of forecast skill. Their internal forecast is finer than what they publish -
+  the benchmark measures what a user of their site/app actually receives.
+- "Lead day" semantics differ slightly between experiments: retro uses
+  issuance-relative previous_dayN (per Open-Meteo archive semantics), while
+  prospective buckets hours [24N, 24N+24) after the snapshot moment. Do not
+  compare numbers across the two tables directly.
+- Day-0 daily scores are excluded: part of "today" has already happened at
+  snapshot time, and several feeds include those elapsed hours as analysis.
 
 ## Running
 

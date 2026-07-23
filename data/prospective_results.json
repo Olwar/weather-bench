@@ -2,52 +2,146 @@
   "hourly_t2m": {
     "fmi_edited": {
       "0": {
-        "n": 6,
-        "mae": 0.193,
-        "bias": 0.033
+        "n": 14,
+        "mae": 0.481,
+        "bias": -0.13
       }
     },
     "ecmwf_ifs025": {
       "0": {
-        "n": 6,
-        "mae": 0.65,
-        "bias": -0.383
+        "n": 14,
+        "mae": 0.729,
+        "bias": -0.271
       }
     },
     "ecmwf_aifs025_single": {
       "0": {
-        "n": 6,
-        "mae": 0.683,
-        "bias": -0.417
+        "n": 14,
+        "mae": 0.707,
+        "bias": -0.107
       }
     },
     "metno_nordic": {
       "0": {
-        "n": 6,
-        "mae": 1.283,
-        "bias": 1.283
+        "n": 14,
+        "mae": 1.007,
+        "bias": 0.907
       }
     },
     "foreca": {
       "0": {
-        "n": 6,
-        "mae": 0.383,
-        "bias": -0.117
+        "n": 14,
+        "mae": 0.429,
+        "bias": -0.086
+      }
+    },
+    "best_match": {
+      "0": {
+        "n": 14,
+        "mae": 1.007,
+        "bias": 0.907
       }
     }
   },
-  "daily": {
-    "foreca_daily": {
-      "tmin_d0": {
-        "n": 6,
-        "mae": 0.583,
-        "bias": 0.45
-      },
-      "tmax_d0": {
-        "n": 6,
-        "mae": 0.6,
-        "bias": -0.367
+  "hourly_ws": {
+    "foreca": {
+      "0": {
+        "n": 11,
+        "mae": 0.7,
+        "bias": -0.464
+      }
+    },
+    "fmi_edited": {
+      "0": {
+        "n": 11,
+        "mae": 0.618,
+        "bias": -0.018
+      }
+    },
+    "ecmwf_ifs025": {
+      "0": {
+        "n": 11,
+        "mae": 0.835,
+        "bias": -0.587
+      }
+    },
+    "ecmwf_aifs025_single": {
+      "0": {
+        "n": 11,
+        "mae": 0.889,
+        "bias": -0.398
+      }
+    },
+    "metno_nordic": {
+      "0": {
+        "n": 11,
+        "mae": 0.645,
+        "bias": -0.027
+      }
+    },
+    "best_match": {
+      "0": {
+        "n": 11,
+        "mae": 0.645,
+        "bias": -0.027
       }
     }
+  },
+  "rain_occurrence": {
+    "foreca": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": null,
+        "csi": null
+      }
+    },
+    "fmi_edited": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": null,
+        "csi": null
+      }
+    },
+    "ecmwf_ifs025": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": 1.0,
+        "csi": 0.0
+      }
+    },
+    "ecmwf_aifs025_single": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": 1.0,
+        "csi": 0.0
+      }
+    },
+    "metno_nordic": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": null,
+        "csi": null
+      }
+    },
+    "best_match": {
+      "0": {
+        "n": 10,
+        "pod": null,
+        "far": null,
+        "csi": null
+      }
+    }
+  },
+  "daily": {},
+  "pairwise_t2m": {
+    "ecmwf_aifs025_single__vs__foreca": {},
+    "ecmwf_aifs025_single__vs__fmi_edited": {},
+    "best_match__vs__foreca": {},
+    "best_match__vs__fmi_edited": {}
   }
 }

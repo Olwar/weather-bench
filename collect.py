@@ -50,6 +50,8 @@ def collect_foreca(con, run_time):
                 for var, key in (("tmin", "tmin"), ("tmax", "tmax"), ("rain", "rain")):
                     if d.get(key) is not None:
                         rows.append(("foreca", city["key"], run_time, date, var, float(d[key])))
+            if not rows:
+                raise RuntimeError("0 rows parsed")
             con.executemany(
                 "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
                 rows,
@@ -58,6 +60,7 @@ def collect_foreca(con, run_time):
         except Exception as e:  # noqa: BLE001 - one source failing must not kill the run
             log(con, run_time, "foreca", city["key"], 0, str(e))
         time.sleep(0.4)
+    con.commit()
 
 
 def collect_foreca_hourly(con, run_time):
@@ -75,6 +78,8 @@ def collect_foreca_hourly(con, run_time):
             rows = []
             for key, body in re.findall(r"'(\d{14})': \{([^}]*)\}", m.group(1)):
                 fields = dict(re.findall(r"(\w+): ('[^']*'|-?[\d.]+)", body))
+                # DST fall-back note: the ambiguous 03:00 hour resolves as fold=0;
+                # one local hour per year maps imperfectly - accepted.
                 local = datetime.strptime(key, "%Y%m%d%H%M%S").replace(tzinfo=HKI)
                 t_utc = local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
                 for field, var in (("t", "t2m"), ("ws", "ws"), ("p", "rain1h")):
@@ -90,6 +95,7 @@ def collect_foreca_hourly(con, run_time):
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "foreca_hourly", city["key"], 0, str(e))
         time.sleep(0.6)
+    con.commit()
 
 
 def collect_fmi_edited(con, run_time):
@@ -103,6 +109,8 @@ def collect_fmi_edited(con, run_time):
                 place=city["fmi_place"], parameters=",".join(FMI_FC_PARAMS), timestep=60,
                 starttime=start, endtime=end,
             )
+            if not rows:
+                raise RuntimeError("0 rows parsed")
             con.executemany(
                 "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
                 [("fmi_edited", city["key"], run_time, t, FMI_FC_PARAMS[p], v)
@@ -112,6 +120,7 @@ def collect_fmi_edited(con, run_time):
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "fmi_edited", city["key"], 0, str(e))
         time.sleep(0.4)
+    con.commit()
 
 
 def collect_open_meteo(con, run_time):
@@ -148,24 +157,32 @@ def collect_open_meteo(con, run_time):
                         rows,
                     )
                     n += len(rows)
+            if n == 0:
+                raise RuntimeError(f"0 rows parsed (error response or key change: {str(data)[:150]})")
             log(con, run_time, "open_meteo", city["key"], n)
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "open_meteo", city["key"], 0, str(e))
         time.sleep(0.4)
+    con.commit()
 
 
 def collect_obs(con, run_time):
+    # 166h window (just under FMI's 168h interval cap): a session outage of up to
+    # ~6 days backfills itself on the next run instead of leaving a permanent hole.
     now = datetime.now(timezone.utc)
-    start = (now - timedelta(hours=48)).strftime("%Y-%m-%dT%H:00:00Z")
+    start = (now - timedelta(hours=166)).strftime("%Y-%m-%dT%H:00:00Z")
     end = now.strftime("%Y-%m-%dT%H:00:00Z")
     for city in CITIES:
         try:
             rows = fetch_obs(city, start, end)
+            if not rows:
+                raise RuntimeError("0 rows parsed")
             store_observations(con, city["key"], rows)
             log(con, run_time, "obs", city["key"], len(rows))
         except Exception as e:  # noqa: BLE001
             log(con, run_time, "obs", city["key"], 0, str(e))
         time.sleep(0.4)
+    con.commit()
 
 
 def main():

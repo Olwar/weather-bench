@@ -6,6 +6,7 @@ Daily aggregation (tmin/tmax) is done over Europe/Helsinki local days in score.p
 import json
 import sqlite3
 import time
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -17,12 +18,20 @@ DB_PATH = DATA_DIR / "bench.sqlite"
 # lat/lon = the FMI observation station used for verification (all sources are
 # interpolated/requested at this exact point so everyone is judged on the same spot).
 CITIES = [
-    {"key": "helsinki",  "fmi_place": "helsinki",  "foreca_id": 100658225, "foreca_path": "Finland/Helsinki",  "lat": 60.17523, "lon": 24.94459},
-    {"key": "tampere",   "fmi_place": "tampere",   "foreca_id": 100634963, "foreca_path": "Finland/Tampere",   "lat": 61.51757, "lon": 23.75388},
-    {"key": "oulu",      "fmi_place": "oulu",      "foreca_id": 100643492, "foreca_path": "Finland/Oulu",      "lat": 64.99685, "lon": 25.52233},
-    {"key": "rovaniemi", "fmi_place": "rovaniemi", "foreca_id": 100638936, "foreca_path": "Finland/Rovaniemi", "lat": 66.49832, "lon": 25.70880},
-    {"key": "turku",     "fmi_place": "turku",     "foreca_id": 100633679, "foreca_path": "Finland/Turku",     "lat": 60.45439, "lon": 22.17870},
-    {"key": "jyvaskyla", "fmi_place": "jyvaskyla", "foreca_id": 100655194, "foreca_path": "Finland/Jyvaskyla", "lat": 62.39332, "lon": 25.68862},
+    {"key": "helsinki",     "fmi_place": "helsinki",      "foreca_id": 100658225, "foreca_path": "Finland/Helsinki",      "lat": 60.17523, "lon": 24.94459},
+    {"key": "tampere",      "fmi_place": "tampere",       "foreca_id": 100634963, "foreca_path": "Finland/Tampere",       "lat": 61.51757, "lon": 23.75388},
+    {"key": "oulu",         "fmi_place": "oulu",          "foreca_id": 100643492, "foreca_path": "Finland/Oulu",          "lat": 64.99685, "lon": 25.52233},
+    {"key": "rovaniemi",    "fmi_place": "rovaniemi",     "foreca_id": 100638936, "foreca_path": "Finland/Rovaniemi",     "lat": 66.49832, "lon": 25.70880},
+    {"key": "turku",        "fmi_place": "turku",         "foreca_id": 100633679, "foreca_path": "Finland/Turku",         "lat": 60.45439, "lon": 22.17870},
+    {"key": "jyvaskyla",    "fmi_place": "jyvaskyla",     "foreca_id": 100655194, "foreca_path": "Finland/Jyvaskyla",     "lat": 62.39332, "lon": 25.68862},
+    {"key": "vaasa",        "fmi_place": "vaasa",         "foreca_id": 100632978, "foreca_path": "Finland/Vaasa",         "lat": 63.09871, "lon": 21.63938},
+    {"key": "kuopio",       "fmi_place": "kuopio",        "foreca_id": 100650224, "foreca_path": "Finland/Kuopio",        "lat": 62.89256, "lon": 27.63331},
+    {"key": "joensuu",      "fmi_place": "joensuu",       "foreca_id": 100655808, "foreca_path": "Finland/Joensuu",       "lat": 62.60179, "lon": 29.72713},
+    {"key": "lappeenranta", "fmi_place": "lappeenranta",  "foreca_id": 100648900, "foreca_path": "Finland/Lappeenranta",  "lat": 61.04030, "lon": 28.12916},
+    {"key": "pori",         "fmi_place": "pori",          "foreca_id": 100640999, "foreca_path": "Finland/Pori",          "lat": 61.46011, "lon": 21.80839},
+    {"key": "kajaani",      "fmi_place": "kajaani",       "foreca_id": 100654899, "foreca_path": "Finland/Kajaani",       "lat": 64.28290, "lon": 27.67114},
+    {"key": "sodankyla",    "fmi_place": "sodankylä",     "foreca_id": 100636464, "foreca_path": "Finland/Sodankyla",     "lat": 67.36663, "lon": 26.62901},
+    {"key": "mariehamn",    "fmi_place": "maarianhamina", "foreca_id": 103041732, "foreca_path": "Finland/Maarianhamina", "lat": 60.12735, "lon": 19.90038},
 ]
 
 # Open-Meteo model ids benchmarked prospectively and retrospectively.
@@ -32,6 +41,7 @@ OM_MODELS = [
     "ecmwf_ifs025",         # ECMWF IFS physics model (what Foreca/FMI build on)
     "ecmwf_aifs025_single", # ECMWF AIFS deterministic - the AI model
     "metno_nordic",         # MET Norway post-processed 1km Nordic dataset
+    "best_match",           # Open-Meteo's auto blend - what a solo dev's app would ship
 ]
 
 UA = "weather-bench/0.1 (personal forecast verification research)"
@@ -56,7 +66,7 @@ def http_json(url: str) -> dict:
 
 def fmi_simple(storedquery: str, **params) -> list[tuple[str, str, float]]:
     """Query an FMI WFS ::simple stored query. Returns [(utc_iso, param_name, value)]."""
-    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    qs = urllib.parse.urlencode(params)  # place names like "sodankylä" need encoding
     url = (
         "https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature"
         f"&storedquery_id={storedquery}&{qs}"
@@ -78,6 +88,10 @@ def fmi_simple(storedquery: str, **params) -> list[tuple[str, str, float]]:
 def get_db() -> sqlite3.Connection:
     DATA_DIR.mkdir(exist_ok=True)
     con = sqlite3.connect(DB_PATH)
+    # WAL + generous busy timeout: score.py / sqlite3 CLI reads during a multi-minute
+    # collect run must not make the final commit die with "database is locked".
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=15000")
     con.executescript(
         """
         CREATE TABLE IF NOT EXISTS forecasts(

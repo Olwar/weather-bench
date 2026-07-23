@@ -7,7 +7,7 @@ This answers "how good are the new models in Finland" today, without waiting.
 Competitors (Foreca / FMI edited forecast) can't be tested retrospectively -
 no public archive of their past forecasts - that's what collect.py accrues.
 
-Usage: python3 retro.py [days]   (default 60, max ~90)
+Usage: python3 retro.py [days]   (default 90, max ~92)
 """
 import json
 import sys
@@ -28,8 +28,14 @@ def fetch_retro_forecasts(con, days: int):
             f"?latitude={city['lat']}&longitude={city['lon']}"
             f"&hourly={hourly_vars}&models={models}&past_days={days}&forecast_days=1"
         )
-        data = http_json(url)
+        try:
+            data = http_json(url)
+        except Exception as e:  # noqa: BLE001 - keep other cities' fetches alive
+            print(f"  forecasts {city['key']}: FAILED {e}")
+            time.sleep(0.5)
+            continue
         blocks = data if isinstance(data, list) else [data]
+        n_rows = 0
         for block in blocks:
             hourly = block.get("hourly", {})
             times = [t + "Z" for t in hourly.get("time", [])]
@@ -54,8 +60,9 @@ def fetch_retro_forecasts(con, days: int):
                     " VALUES(?,?,?,?,?)",
                     rows,
                 )
+                n_rows += len(rows)
         con.commit()
-        print(f"  forecasts {city['key']}: ok")
+        print(f"  forecasts {city['key']}: {n_rows} rows" + (" (SUSPICIOUS: 0)" if n_rows == 0 else ""))
         time.sleep(0.5)
 
 
@@ -120,7 +127,7 @@ def print_table(results: dict):
 
 
 def main():
-    days = int(sys.argv[1]) if len(sys.argv) > 1 else 60
+    days = int(sys.argv[1]) if len(sys.argv) > 1 else 90
     con = get_db()
     print(f"Retrospective benchmark, past {days} days, {len(CITIES)} cities")
     print("Fetching archived forecasts (previous-runs API)...")
