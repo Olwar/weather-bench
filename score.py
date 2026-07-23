@@ -75,10 +75,12 @@ def daily_series(con) -> tuple[dict, dict]:
     }
 
     fc_daily: dict = {}
-    # Foreca: native daily rows (target_time is already a local date string)
+    # Foreca's native daily feed, kept as its own source ("foreca_daily") since
+    # hourly-derived "foreca" daily values exist too and use the same methodology
+    # as every other source.
     q = "SELECT city, run_time, target_time, var, value FROM forecasts WHERE source='foreca' AND var IN ('tmin','tmax')"
     for city, run_time, date, var, value in con.execute(q):
-        fc_daily.setdefault(("foreca", city, run_time, date), {})[var] = value
+        fc_daily.setdefault(("foreca_daily", city, run_time, date), {})[var] = value
     # Hourly sources: derive local-day min/max, only for fully-covered days (>=23 hours)
     hr: dict = defaultdict(list)
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='t2m'"

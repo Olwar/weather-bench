@@ -14,7 +14,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
-from common import CITIES, OM_MODELS, get_db, http_json, fetch_obs_t2m, store_observations, DATA_DIR
+from common import CITIES, OM_MODELS, get_db, http_json, fetch_obs, store_observations, DATA_DIR
 
 MAX_LEAD = 7
 
@@ -67,7 +67,7 @@ def fetch_retro_obs(con, days: int):
         n = 0
         while t < end:
             t2 = min(t + timedelta(days=6), end)
-            rows = fetch_obs_t2m(city, t.strftime("%Y-%m-%dT%H:%M:%SZ"), t2.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            rows = fetch_obs(city, t.strftime("%Y-%m-%dT%H:%M:%SZ"), t2.strftime("%Y-%m-%dT%H:%M:%SZ"))
             store_observations(con, city["key"], rows)
             n += len(rows)
             t = t2

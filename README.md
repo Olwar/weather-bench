@@ -32,21 +32,28 @@ i.e. AIFS at day 7 ≈ IFS at day 6).
 `collect.py` snapshots, per city, at the same wall-clock moment (like a user
 opening all the apps side by side):
 
-- **foreca** - daily tmin/tmax/rain, ~13 days (`api.foreca.net/data/daily/<id>.json`,
-  the open endpoint their own site uses; id = 100000000 + geonames id)
-- **fmi_edited** - FMI's human-curated hourly forecast, ~10 days
+- **foreca** - two feeds: native daily tmin/tmax/rain, ~13 days
+  (`api.foreca.net/data/daily/<id>.json`, the open endpoint their site uses;
+  id = 100000000 + geonames id), plus hourly t2m/ws/rain1h, ~11 days, parsed
+  from the server-rendered `hour_data` JS blob on `foreca.fi/<path>/details`
+  pages (local-time keys, converted to UTC)
+- **fmi_edited** - FMI's human-curated hourly t2m/ws/rain1h, ~10 days
   (open WFS `fmi::forecast::edited::weather::scandinavia::point::simple`)
-- **ecmwf_ifs025 / ecmwf_aifs025_single / metno_nordic** - hourly, 10 days (Open-Meteo)
-- **obs** - last 48 h of station observations (idempotent upsert)
+- **ecmwf_ifs025 / ecmwf_aifs025_single / metno_nordic** - hourly t2m/ws/rain1h,
+  16 days requested (IFS/AIFS deliver ~15, MET Nordic ~2.5) via Open-Meteo,
+  wind in m/s
+- **obs** - last 48 h of station observations: t2m, ws (10-min avg), rain1h
+  (idempotent upsert)
 
-`score.py` then reports MAE by lead day: hourly t2m (all hourly sources) and
-daily tmin/tmax (adds Foreca, whose feed is daily-only). Daily values for hourly
-sources and observations are min/max over Europe/Helsinki local days; Foreca's
-native daily values are trusted as-is.
+`score.py` reports MAE by lead day: hourly t2m (all sources incl. Foreca) and
+daily tmin/tmax. Daily values for hourly sources and observations are min/max
+over Europe/Helsinki local days; Foreca's native daily feed is scored separately
+as `foreca_daily`. Wind/precip boards can be added at reporting time - the data
+is in the DB from day one.
 
-Foreca comparability caveat: Foreca's daily numbers are for the *city*, not the
-station point, and its true skill lives partly in its hourly product we cannot
-see. The daily board is still the like-for-like consumer-facing comparison.
+Foreca comparability caveat: Foreca's numbers are for the *city* point
+(their geocoded coordinates), not the FMI station point. Close in practice,
+but station-adjacent sources (FMI edited) have a small home advantage.
 
 ## Running
 

@@ -17,12 +17,12 @@ DB_PATH = DATA_DIR / "bench.sqlite"
 # lat/lon = the FMI observation station used for verification (all sources are
 # interpolated/requested at this exact point so everyone is judged on the same spot).
 CITIES = [
-    {"key": "helsinki",  "fmi_place": "helsinki",  "foreca_id": 100658225, "lat": 60.17523, "lon": 24.94459},
-    {"key": "tampere",   "fmi_place": "tampere",   "foreca_id": 100634963, "lat": 61.51757, "lon": 23.75388},
-    {"key": "oulu",      "fmi_place": "oulu",      "foreca_id": 100643492, "lat": 64.99685, "lon": 25.52233},
-    {"key": "rovaniemi", "fmi_place": "rovaniemi", "foreca_id": 100638936, "lat": 66.49832, "lon": 25.70880},
-    {"key": "turku",     "fmi_place": "turku",     "foreca_id": 100633679, "lat": 60.45439, "lon": 22.17870},
-    {"key": "jyvaskyla", "fmi_place": "jyvaskyla", "foreca_id": 100655194, "lat": 62.39332, "lon": 25.68862},
+    {"key": "helsinki",  "fmi_place": "helsinki",  "foreca_id": 100658225, "foreca_path": "Finland/Helsinki",  "lat": 60.17523, "lon": 24.94459},
+    {"key": "tampere",   "fmi_place": "tampere",   "foreca_id": 100634963, "foreca_path": "Finland/Tampere",   "lat": 61.51757, "lon": 23.75388},
+    {"key": "oulu",      "fmi_place": "oulu",      "foreca_id": 100643492, "foreca_path": "Finland/Oulu",      "lat": 64.99685, "lon": 25.52233},
+    {"key": "rovaniemi", "fmi_place": "rovaniemi", "foreca_id": 100638936, "foreca_path": "Finland/Rovaniemi", "lat": 66.49832, "lon": 25.70880},
+    {"key": "turku",     "fmi_place": "turku",     "foreca_id": 100633679, "foreca_path": "Finland/Turku",     "lat": 60.45439, "lon": 22.17870},
+    {"key": "jyvaskyla", "fmi_place": "jyvaskyla", "foreca_id": 100655194, "foreca_path": "Finland/Jyvaskyla", "lat": 62.39332, "lon": 25.68862},
 ]
 
 # Open-Meteo model ids benchmarked prospectively and retrospectively.
@@ -106,11 +106,15 @@ def store_observations(con: sqlite3.Connection, city: str, rows: list[tuple[str,
     )
 
 
-def fetch_obs_t2m(city: dict, start_utc: str, end_utc: str) -> list[tuple[str, str, float]]:
-    """Hourly (top-of-hour) 2m temperature observations from the city's FMI station."""
+# FMI observation parameter -> our canonical var name
+OBS_PARAMS = {"t2m": "t2m", "ws_10min": "ws", "r_1h": "rain1h"}
+
+
+def fetch_obs(city: dict, start_utc: str, end_utc: str) -> list[tuple[str, str, float]]:
+    """Hourly (top-of-hour) temperature/wind/precip observations from the city's FMI station."""
     rows = fmi_simple(
         "fmi::observations::weather::simple",
-        place=city["fmi_place"], parameters="t2m", timestep=60,
+        place=city["fmi_place"], parameters=",".join(OBS_PARAMS), timestep=60,
         starttime=start_utc, endtime=end_utc,
     )
-    return [(t, "t2m", v) for (t, _p, v) in rows]
+    return [(t, OBS_PARAMS[p], v) for (t, p, v) in rows if p in OBS_PARAMS]

@@ -27,10 +27,17 @@
         "mae": 1.283,
         "bias": 1.283
       }
+    },
+    "foreca": {
+      "0": {
+        "n": 6,
+        "mae": 0.383,
+        "bias": -0.117
+      }
     }
   },
   "daily": {
-    "foreca": {
+    "foreca_daily": {
       "tmin_d0": {
         "n": 6,
         "mae": 0.583,
