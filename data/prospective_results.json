@@ -2,191 +2,549 @@
   "hourly_t2m": {
     "fmi_edited": {
       "0": {
-        "n": 14,
-        "mae": 0.481,
-        "bias": -0.13
+        "n": 1008,
+        "mae": 1.009,
+        "bias": 0.012
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.628,
+        "bias": -0.312
       }
     },
     "ecmwf_ifs025": {
       "0": {
-        "n": 14,
-        "mae": 0.729,
-        "bias": -0.271
+        "n": 1008,
+        "mae": 1.046,
+        "bias": 0.223
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.848,
+        "bias": -0.447
       }
     },
     "ecmwf_aifs025_single": {
       "0": {
-        "n": 14,
-        "mae": 0.707,
-        "bias": -0.107
+        "n": 1008,
+        "mae": 1.185,
+        "bias": 0.385
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.886,
+        "bias": -0.14
       }
     },
     "metno_nordic": {
       "0": {
-        "n": 14,
-        "mae": 1.007,
-        "bias": 0.907
+        "n": 1008,
+        "mae": 1.207,
+        "bias": 0.891
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.828,
+        "bias": 0.582
       }
     },
     "foreca": {
       "0": {
-        "n": 14,
-        "mae": 0.429,
-        "bias": -0.086
+        "n": 1008,
+        "mae": 1.04,
+        "bias": 0.081
+      },
+      "1": {
+        "n": 210,
+        "mae": 1.082,
+        "bias": -0.728
       }
     },
     "best_match": {
       "0": {
-        "n": 14,
-        "mae": 1.007,
-        "bias": 0.907
+        "n": 1008,
+        "mae": 1.207,
+        "bias": 0.891
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.828,
+        "bias": 0.582
       }
     }
   },
   "hourly_t2m_quantized": {
     "fmi_edited": {
       "0": {
-        "n": 14,
-        "mae": 0.486,
-        "bias": -0.086
+        "n": 1008,
+        "mae": 1.036,
+        "bias": 0.006
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.673,
+        "bias": -0.314
       }
     },
     "ecmwf_ifs025": {
       "0": {
-        "n": 14,
-        "mae": 0.757,
-        "bias": -0.371
+        "n": 1008,
+        "mae": 1.067,
+        "bias": 0.213
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.889,
+        "bias": -0.48
       }
     },
     "ecmwf_aifs025_single": {
       "0": {
-        "n": 14,
-        "mae": 0.971,
-        "bias": -0.086
+        "n": 1008,
+        "mae": 1.213,
+        "bias": 0.365
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.904,
+        "bias": -0.095
       }
     },
     "metno_nordic": {
       "0": {
-        "n": 14,
-        "mae": 0.986,
-        "bias": 0.843
+        "n": 1008,
+        "mae": 1.239,
+        "bias": 0.897
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.853,
+        "bias": 0.562
       }
     },
     "foreca": {
       "0": {
-        "n": 14,
-        "mae": 0.429,
-        "bias": -0.086
+        "n": 1008,
+        "mae": 1.04,
+        "bias": 0.081
+      },
+      "1": {
+        "n": 210,
+        "mae": 1.082,
+        "bias": -0.728
       }
     },
     "best_match": {
       "0": {
-        "n": 14,
-        "mae": 0.986,
-        "bias": 0.843
+        "n": 1008,
+        "mae": 1.239,
+        "bias": 0.897
+      },
+      "1": {
+        "n": 210,
+        "mae": 0.853,
+        "bias": 0.562
       }
     }
   },
   "hourly_ws": {
     "foreca": {
       "0": {
-        "n": 11,
-        "mae": 0.7,
-        "bias": -0.464
+        "n": 792,
+        "mae": 0.987,
+        "bias": -0.095
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.973,
+        "bias": 0.252
       }
     },
     "fmi_edited": {
       "0": {
-        "n": 11,
-        "mae": 0.618,
-        "bias": -0.018
+        "n": 792,
+        "mae": 0.732,
+        "bias": -0.013
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.855,
+        "bias": 0.387
       }
     },
     "ecmwf_ifs025": {
       "0": {
-        "n": 11,
-        "mae": 0.835,
-        "bias": -0.587
+        "n": 792,
+        "mae": 0.947,
+        "bias": -0.415
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.833,
+        "bias": -0.04
       }
     },
     "ecmwf_aifs025_single": {
       "0": {
-        "n": 11,
-        "mae": 0.889,
-        "bias": -0.398
+        "n": 792,
+        "mae": 0.854,
+        "bias": -0.07
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.892,
+        "bias": 0.336
       }
     },
     "metno_nordic": {
       "0": {
-        "n": 11,
-        "mae": 0.645,
-        "bias": -0.027
+        "n": 792,
+        "mae": 0.731,
+        "bias": 0.034
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.858,
+        "bias": 0.706
       }
     },
     "best_match": {
       "0": {
-        "n": 11,
-        "mae": 0.645,
-        "bias": -0.027
+        "n": 792,
+        "mae": 0.731,
+        "bias": 0.034
+      },
+      "1": {
+        "n": 165,
+        "mae": 0.858,
+        "bias": 0.706
       }
     }
   },
   "rain_occurrence": {
     "foreca": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": null,
-        "csi": null
+        "n": 720,
+        "pod": 0.34,
+        "far": 0.758,
+        "csi": 0.165
+      },
+      "1": {
+        "n": 150,
+        "pod": 0.4,
+        "far": 0.375,
+        "csi": 0.323
       }
     },
     "fmi_edited": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": null,
-        "csi": null
+        "n": 720,
+        "pod": 0.489,
+        "far": 0.652,
+        "csi": 0.256
+      },
+      "1": {
+        "n": 150,
+        "pod": 0.72,
+        "far": 0.471,
+        "csi": 0.439
       }
     },
     "ecmwf_ifs025": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": 1.0,
-        "csi": 0.0
+        "n": 720,
+        "pod": 0.596,
+        "far": 0.794,
+        "csi": 0.181
+      },
+      "1": {
+        "n": 150,
+        "pod": 0.64,
+        "far": 0.543,
+        "csi": 0.364
       }
     },
     "ecmwf_aifs025_single": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": 1.0,
-        "csi": 0.0
+        "n": 720,
+        "pod": 0.936,
+        "far": 0.822,
+        "csi": 0.176
+      },
+      "1": {
+        "n": 150,
+        "pod": 1.0,
+        "far": 0.719,
+        "csi": 0.281
       }
     },
     "metno_nordic": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": null,
-        "csi": null
+        "n": 720,
+        "pod": 0.447,
+        "far": 0.618,
+        "csi": 0.259
+      },
+      "1": {
+        "n": 150,
+        "pod": 0.6,
+        "far": 0.545,
+        "csi": 0.349
       }
     },
     "best_match": {
       "0": {
-        "n": 10,
-        "pod": null,
-        "far": null,
-        "csi": null
+        "n": 720,
+        "pod": 0.447,
+        "far": 0.618,
+        "csi": 0.259
+      },
+      "1": {
+        "n": 150,
+        "pod": 0.6,
+        "far": 0.545,
+        "csi": 0.349
       }
     }
   },
-  "daily": {},
+  "daily": {
+    "foreca_daily": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 1.671,
+        "bias": 1.314
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.714,
+        "bias": -0.114
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.913,
+        "bias": -1.239
+      }
+    },
+    "fmi_edited": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 1.63,
+        "bias": 1.331
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.853,
+        "bias": 0.06
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.774,
+        "bias": -0.649
+      }
+    },
+    "ecmwf_ifs025": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 2.321,
+        "bias": 2.193
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.7,
+        "bias": -0.271
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.96,
+        "bias": -1.12
+      }
+    },
+    "ecmwf_aifs025_single": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 2.55,
+        "bias": 1.75
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.743,
+        "bias": -0.386
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.49,
+        "bias": -0.37
+      }
+    },
+    "metno_nordic": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 2.168,
+        "bias": 2.161
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.729,
+        "bias": 0.471
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.725,
+        "bias": -0.775
+      }
+    },
+    "foreca": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 1.729,
+        "bias": 1.386
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.714,
+        "bias": -0.114
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.892,
+        "bias": -1.241
+      }
+    },
+    "best_match": {
+      "tmin_d1": {
+        "n": 28,
+        "mae": 2.168,
+        "bias": 2.161
+      },
+      "tmax_d1": {
+        "n": 28,
+        "mae": 0.729,
+        "bias": 0.471
+      },
+      "rain_d1": {
+        "n": 20,
+        "mae": 1.725,
+        "bias": -0.775
+      }
+    }
+  },
   "pairwise_t2m": {
-    "ecmwf_aifs025_single__vs__foreca": {},
-    "ecmwf_aifs025_single__vs__fmi_edited": {},
-    "best_match__vs__foreca": {},
-    "best_match__vs__fmi_edited": {}
+    "ecmwf_aifs025_single__vs__foreca": {
+      "0": {
+        "n": 1008,
+        "days": 3,
+        "mae_cand": 1.185,
+        "mae_comp": 1.04,
+        "diff": 0.145,
+        "ci95": [
+          0.145,
+          0.145
+        ],
+        "ci95_block_sensitivity": {
+          "3": [
+            0.145,
+            0.145
+          ],
+          "7": [
+            0.145,
+            0.145
+          ]
+        },
+        "p": 0.0005,
+        "win_rate": 0.465,
+        "tie_rate": 0.047,
+        "enough_days": false,
+        "primary": false,
+        "significant": null
+      }
+    },
+    "ecmwf_aifs025_single__vs__fmi_edited": {
+      "0": {
+        "n": 1008,
+        "days": 3,
+        "mae_cand": 1.185,
+        "mae_comp": 1.009,
+        "diff": 0.176,
+        "ci95": [
+          0.176,
+          0.176
+        ],
+        "ci95_block_sensitivity": {
+          "3": [
+            0.176,
+            0.176
+          ],
+          "7": [
+            0.176,
+            0.176
+          ]
+        },
+        "p": 0.0005,
+        "win_rate": 0.439,
+        "tie_rate": 0.011,
+        "enough_days": false,
+        "primary": false,
+        "significant": null
+      }
+    },
+    "best_match__vs__foreca": {
+      "0": {
+        "n": 1008,
+        "days": 3,
+        "mae_cand": 1.207,
+        "mae_comp": 1.04,
+        "diff": 0.166,
+        "ci95": [
+          0.166,
+          0.166
+        ],
+        "ci95_block_sensitivity": {
+          "3": [
+            0.166,
+            0.166
+          ],
+          "7": [
+            0.166,
+            0.166
+          ]
+        },
+        "p": 0.0005,
+        "win_rate": 0.436,
+        "tie_rate": 0.029,
+        "enough_days": false,
+        "primary": false,
+        "significant": null
+      }
+    },
+    "best_match__vs__fmi_edited": {
+      "0": {
+        "n": 1008,
+        "days": 3,
+        "mae_cand": 1.207,
+        "mae_comp": 1.009,
+        "diff": 0.198,
+        "ci95": [
+          0.198,
+          0.198
+        ],
+        "ci95_block_sensitivity": {
+          "3": [
+            0.198,
+            0.198
+          ],
+          "7": [
+            0.198,
+            0.198
+          ]
+        },
+        "p": 0.0005,
+        "win_rate": 0.398,
+        "tie_rate": 0.004,
+        "enough_days": false,
+        "primary": false,
+        "significant": null
+      }
+    }
   },
   "config": {
     "block_len": 5,

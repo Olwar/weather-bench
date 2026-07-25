@@ -37,7 +37,9 @@ N_BOOT = 2000
 BLOCK_LEN = 5      # bootstrap block: consecutive target dates (synoptic persistence)
 MIN_DAYS = 20      # min distinct target dates before "significant" may print
 ALPHA = 0.05
-CANDIDATES = ["ecmwf_aifs025_single", "best_match"]
+# ecmwf_aifs_ens_mean was added 2026-07-25, AFTER pre-registration, so it is an
+# exploratory secondary candidate only - the primary endpoint below stays fixed.
+CANDIDATES = ["ecmwf_aifs025_single", "ecmwf_aifs_ens_mean", "best_match"]
 COMPETITORS = ["foreca", "fmi_edited"]
 PRIMARY = ("ecmwf_aifs025_single", "foreca", "pooled_1_7")
 

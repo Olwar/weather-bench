@@ -6,7 +6,8 @@ Run every ~6-12h. Each run stores, per city:
     hour_data blob on foreca.fi /details pages)          [source=foreca, hourly vars]
   - FMI edited (human-curated) hourly t2m/ws/rain1h, ~10 days [source=fmi_edited]
   - Open-Meteo hourly t2m/ws/rain1h per model, 16 days  [source=<model id>]
-  - FMI station observations for the last 48h (verification truth)
+  - AIFS ensemble MEAN over its 51 members, 16 days     [source=ecmwf_aifs_ens_mean]
+  - FMI station observations for the last 166h (verification truth)
 
 run_time = collection hour (UTC). Lead time is computed at scoring from run_time,
 which slightly flatters no one in particular: every source is snapshotted at the
@@ -30,6 +31,12 @@ HKI = ZoneInfo("Europe/Helsinki")
 FMI_FC_PARAMS = {"temperature": "t2m", "windspeedms": "ws", "precipitation1h": "rain1h"}
 # Open-Meteo hourly variable -> canonical var
 OM_VARS = {"temperature_2m": "t2m", "wind_speed_10m": "ws", "precipitation": "rain1h"}
+# ECMWF AIFS ensemble (separate Open-Meteo endpoint; 51 members incl. control).
+# We store the ensemble MEAN - averaging cancels unpredictable detail, so the mean
+# normally beats any single deterministic run on MAE. This is the strongest freely
+# available AI forecast and the realistic "best a solo dev could ship" candidate.
+AIFS_ENS_MODEL = "ecmwf_aifs025_ensemble"
+AIFS_ENS_SOURCE = "ecmwf_aifs_ens_mean"
 
 
 def log(con, run_time, source, city, rows, error=None):
@@ -173,6 +180,54 @@ def collect_open_meteo(con, run_time):
     con.commit()
 
 
+def collect_aifs_ensemble(con, run_time):
+    """Store the AIFS ensemble mean per hour/variable.
+
+    Response shape: hourly = {time, temperature_2m (control), temperature_2m_member01..NN}.
+    The mean is taken over the control plus every member, which is the standard
+    ensemble mean and what an app would surface as "the" forecast.
+    """
+    for city in CITIES:
+        try:
+            data = http_json(
+                "https://ensemble-api.open-meteo.com/v1/ensemble"
+                f"?latitude={city['lat']}&longitude={city['lon']}"
+                f"&hourly={','.join(OM_VARS)}&wind_speed_unit=ms"
+                f"&models={AIFS_ENS_MODEL}&forecast_days=16"
+            )
+            blocks = data if isinstance(data, list) else [data]
+            n = 0
+            for block in blocks:
+                hourly = block.get("hourly", {})
+                times = [t + "Z" for t in hourly.get("time", [])]
+                for om_var, var in OM_VARS.items():
+                    # control key is the bare name; members are <name>_memberNN
+                    series = [
+                        vals for key, vals in hourly.items()
+                        if key == om_var or key.startswith(om_var + "_member")
+                    ]
+                    if not series:
+                        continue
+                    rows = []
+                    for i, t in enumerate(times):
+                        vals = [s[i] for s in series if i < len(s) and s[i] is not None]
+                        if vals:
+                            rows.append((AIFS_ENS_SOURCE, city["key"], run_time, t, var,
+                                         sum(vals) / len(vals)))
+                    con.executemany(
+                        "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                        rows,
+                    )
+                    n += len(rows)
+            if n == 0:
+                raise RuntimeError(f"0 rows parsed (error or key change: {str(data)[:150]})")
+            log(con, run_time, AIFS_ENS_SOURCE, city["key"], n)
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, AIFS_ENS_SOURCE, city["key"], 0, str(e))
+        time.sleep(0.4)
+    con.commit()
+
+
 def collect_obs(con, run_time):
     # 166h window (just under FMI's 168h interval cap): a session outage of up to
     # ~6 days backfills itself on the next run instead of leaving a permanent hole.
@@ -202,6 +257,7 @@ def main():
     collect_foreca_hourly(con, run_time)
     collect_fmi_edited(con, run_time)
     collect_open_meteo(con, run_time)
+    collect_aifs_ensemble(con, run_time)
     collect_obs(con, run_time)
     con.commit()
     errs = con.execute(

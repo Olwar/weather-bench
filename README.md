@@ -60,6 +60,10 @@ never merge):
   t2m/ws/rain1h, 16 days requested (IFS/AIFS deliver ~15, MET Nordic ~2.5) via
   Open-Meteo, wind in m/s; an empty model/var feed raises (a dead feed must not
   be masked by healthy ones)
+- **ecmwf_aifs_ens_mean** - ECMWF AIFS *ensemble* (51 members incl. control) from
+  Open-Meteo's separate ensemble endpoint, stored as the per-hour mean, 16 days.
+  Added 2026-07-25, after pre-registration, so it is an **exploratory secondary
+  candidate**: the primary endpoint stays AIFS-deterministic vs Foreca.
 - **obs** - last 166 h of station observations (idempotent upsert with
   OR REPLACE so FMI's later QC corrections win; outages up to ~6 days self-heal)
 
