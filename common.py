@@ -4,6 +4,7 @@ All timestamps are stored as UTC ISO strings "YYYY-MM-DDTHH:MMZ".
 Daily aggregation (tmin/tmax) is done over Europe/Helsinki local days in score.py.
 """
 import json
+import os
 import sqlite3
 import time
 import urllib.parse
@@ -11,7 +12,16 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
+# macOS blocks launchd-started jobs from reading ~/Documents, so once install.sh
+# has set up the background agent the data lives under ~/Library instead. Prefer
+# that location when it exists so scheduled and manual runs share one database.
+_LIBRARY_DATA = Path.home() / "Library/Application Support/weather-bench/data"
+if os.environ.get("WEATHERBENCH_DATA"):
+    DATA_DIR = Path(os.environ["WEATHERBENCH_DATA"])
+elif _LIBRARY_DATA.exists():
+    DATA_DIR = _LIBRARY_DATA
+else:
+    DATA_DIR = Path(__file__).parent / "data"
 DB_PATH = DATA_DIR / "bench.sqlite"
 
 # key = city slug; fmi_place = FMI WFS place param; foreca_id = 100000000 + geonames id;
@@ -105,7 +115,7 @@ def fmi_simple(storedquery: str, expect_pos=None, **params) -> list[tuple[str, s
 
 
 def get_db() -> sqlite3.Connection:
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     # WAL + generous busy timeout: score.py / sqlite3 CLI reads during a multi-minute
     # collect run must not make the final commit die with "database is locked".

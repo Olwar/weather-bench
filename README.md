@@ -113,11 +113,33 @@ Stdlib only, no venv. Data in `data/bench.sqlite` (tables: `forecasts`,
 `observations`, `retro_forecasts`, `collect_log`); results JSON alongside;
 daily rotating DB backups in `data/backups/` (last 7 kept).
 
-Collection cadence is handled inside the long-running Claude Code session via
-self-scheduled wakeups (target: collect every ~6 h). If the session dies, run
-`collect.py` twice a day by hand or wire it to launchd (note: launchd cannot
-read `~/Documents` due to TCC - copy the scripts to `~/Library` first, see the
-flagged-notifier pattern in the SocialHuman repo).
+## Scheduled collection (launchd)
+
+`./install.sh` installs `com.weatherbench.collect`, a launchd agent that runs
+`collect.py` every 6 h **independently of any Claude Code session, terminal, or
+login shell**. launchd (unlike cron) runs a missed interval as soon as the Mac
+wakes, so overnight sleep no longer costs snapshots.
+
+Because macOS blocks launchd-started jobs from reading `~/Documents`, the agent
+runs from `~/Library/Application Support/weather-bench/` and the database lives
+in its `data/` subdirectory. **This repo remains the source of truth for code** —
+`install.sh` copies the `.py` files across, so re-run it after editing them. The
+database is *moved* on first install and never overwritten afterwards.
+
+`common.py` resolves `DATA_DIR` to the `~/Library` copy whenever it exists (or
+to `$WEATHERBENCH_DATA` if set), so manual `score.py` / `retro.py` runs from the
+repo and the scheduled collector share one database automatically.
+
+```bash
+./install.sh                                             # install or update
+tail -f ~/Library/Logs/weather-bench.log                 # watch it run
+launchctl print gui/$UID/com.weatherbench.collect        # status
+launchctl kickstart -k gui/$UID/com.weatherbench.collect # collect right now
+launchctl bootout gui/$UID/com.weatherbench.collect      # uninstall (keeps data)
+```
+
+Scoring is deliberately *not* scheduled — it is cheap, idempotent, and recomputed
+from stored data on demand, so only collection is time-critical.
 
 Verification conventions: forecast lead = target time minus snapshot time (fair:
 every source is snapshotted simultaneously). Station-point verification slightly
