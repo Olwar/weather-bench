@@ -103,8 +103,8 @@ sensitivity board (all sources rounded to integers).
 
 ```bash
 python3 retro.py [days]   # retrospective benchmark (default 90, max ~92)
-python3 collect.py        # one prospective snapshot (~1 min; run every 6-12 h;
-                          #   exits non-zero if any source/city failed)
+python3 collect.py        # one prospective snapshot (~1 min; normally run by the
+                          #   launchd agent; exits non-zero if any source failed)
 python3 score.py          # score accrued snapshots (meaningful after ~2+ days;
                           #   significance gates open at 20 distinct days)
 ```
@@ -116,9 +116,10 @@ daily rotating DB backups in `data/backups/` (last 7 kept).
 ## Scheduled collection (launchd)
 
 `./install.sh` installs `com.weatherbench.collect`, a launchd agent that runs
-`collect.py` every 6 h **independently of any Claude Code session, terminal, or
-login shell**. launchd (unlike cron) runs a missed interval as soon as the Mac
-wakes, so overnight sleep no longer costs snapshots.
+`collect.py` every 5 h (see the note below on why not 6) **independently of any
+Claude Code session, terminal, or login shell**. launchd (unlike cron) runs a
+missed interval as soon as the Mac wakes, so overnight sleep no longer costs
+snapshots.
 
 Because macOS blocks launchd-started jobs from reading `~/Documents`, the agent
 runs from `~/Library/Application Support/weather-bench/` and the database lives
