@@ -200,9 +200,23 @@ def daily_board(con, obs_daily, fc_daily) -> dict:
 
 def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT):
     """Circular moving-block bootstrap over consecutive local target dates.
-    Returns (ci_lo, ci_hi, p_two_sided) for MAE_A - MAE_B."""
+
+    Returns (ci_lo, ci_hi, p_two_sided), or (None, None, None) when the
+    resampling is DEGENERATE - with fewer distinct dates than the block length
+    every draw contains every date, so all draws are identical, the interval
+    collapses to a point and p collapses to the 1/n_boot floor. That looks like
+    overwhelming evidence when it actually means "not enough data to resample",
+    so it must be reported as absent rather than as a number.
+    """
     dates = sorted(samples_by_date)
     nd = len(dates)
+    # Structural degeneracy: when the block is at least as long as the record,
+    # one circular block already covers every date, so every draw is the same
+    # multiset and only the summation ORDER varies. (Do not try to detect this
+    # by comparing draw values - floating-point addition is not associative, so
+    # the draws differ in the last bits and an equality test silently passes.)
+    if nd <= block_len:
+        return None, None, None
     rng = random.Random(42)
     n_blocks = max(1, math.ceil(nd / block_len))
     diffs = []
@@ -222,6 +236,8 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
         if n:
             diffs.append((sum_a - sum_b) / n)
     diffs.sort()
+    if not diffs or diffs[0] == diffs[-1]:
+        return None, None, None  # degenerate: zero variance across draws
     last = len(diffs) - 1
     lo = diffs[min(last, max(0, int(0.025 * len(diffs))))]
     hi = diffs[min(last, int(0.975 * len(diffs)))]
@@ -238,19 +254,24 @@ def _summarize_pairs(by_date: dict) -> dict:
     wins = sum(1 for a, b in pairs if abs(a) < abs(b))
     ties = sum(1 for a, b in pairs if abs(a) == abs(b))
     lo, hi, p = _block_bootstrap(by_date, BLOCK_LEN)
-    sens = {
-        str(bl): [round(x, 3) for x in _block_bootstrap(by_date, bl)[:2]]
-        for bl in (3, 7)
-    }
+    degenerate = p is None
+    sens = {}
+    for bl in (3, 7):
+        s_lo, s_hi, _ = _block_bootstrap(by_date, bl)
+        sens[str(bl)] = None if s_lo is None else [round(s_lo, 3), round(s_hi, 3)]
     return {
         "n": n,
         "days": len(by_date),
         "mae_cand": round(mae_a, 3),
         "mae_comp": round(mae_b, 3),
         "diff": round(mae_a - mae_b, 3),   # empirical point estimate
-        "ci95": [round(lo, 3), round(hi, 3)],
+        # ci95/p are null while the bootstrap is degenerate (too few distinct
+        # dates to resample); reporting the collapsed values would read as
+        # spurious near-certainty.
+        "ci95": None if degenerate else [round(lo, 3), round(hi, 3)],
         "ci95_block_sensitivity": sens,
-        "p": round(p, 4),
+        "p": None if degenerate else round(p, 4),
+        "degenerate_bootstrap": degenerate,
         "win_rate": round((wins + 0.5 * ties) / n, 3),  # ties count half
         "tie_rate": round(ties / n, 3),
         "enough_days": len(by_date) >= MIN_DAYS,
@@ -293,7 +314,7 @@ def apply_significance(pairs: dict):
     for (cand, comp), leads in pairs.items():
         for lead, s in leads.items():
             s["primary"] = (cand, comp, lead) == PRIMARY
-            if not s["enough_days"]:
+            if not s["enough_days"] or s["p"] is None:
                 s["significant"] = None  # insufficient data for any inference
             elif s["primary"]:
                 s["significant"] = s["p"] <= ALPHA
@@ -343,11 +364,13 @@ def print_pairwise(all_pairs: dict):
             continue
         print(f"{'lead':>10}{'n':>7}{'days':>6}{'cand':>7}{'comp':>7}{'diff':>7}{'CI95':>18}{'p':>8}{'win%':>6}  sig")
         for lead, s in leads.items():
-            ci = f"[{s['ci95'][0]:+.2f},{s['ci95'][1]:+.2f}]"
+            # too few distinct dates to resample -> no interval, no p-value
+            ci = "-" if s["ci95"] is None else f"[{s['ci95'][0]:+.2f},{s['ci95'][1]:+.2f}]"
+            pv = "-" if s["p"] is None else f"{s['p']:.4f}"
             sig = {True: "YES", False: "no", None: "n/a"}[s["significant"]]
             tag = " *PRIMARY*" if s["primary"] else ""
             print(f"{lead:>10}{s['n']:>7}{s['days']:>6}{s['mae_cand']:>7.2f}{s['mae_comp']:>7.2f}"
-                  f"{s['diff']:>+7.2f}{ci:>18}{s['p']:>8.4f}{100*s['win_rate']:>6.0f}  {sig}{tag}")
+                  f"{s['diff']:>+7.2f}{ci:>18}{pv:>8}{100*s['win_rate']:>6.0f}  {sig}{tag}")
 
 
 def main():
