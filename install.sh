@@ -57,10 +57,16 @@ cat > "$PLIST" <<PLIST_EOF
     <key>WorkingDirectory</key>
     <string>$APP_DIR</string>
 
-    <!-- every 6 hours; launchd runs a missed interval as soon as the Mac wakes,
-         which cron would silently skip -->
+    <!-- Every 5 hours, NOT 6. The models issue new runs on a 6-hourly cycle
+         (00/06/12/18 UTC); sampling on that same period would phase-lock us to a
+         fixed point in every model's update cycle forever, systematically
+         catching them at a constant staleness while Foreca (which refreshes far
+         more often) stays near-fresh. 5 does not divide 6, so successive samples
+         precess through all six phases of the cycle within ~30 h.
+         launchd also runs a missed interval as soon as the Mac wakes, which cron
+         would silently skip. -->
     <key>StartInterval</key>
-    <integer>21600</integer>
+    <integer>18000</integer>
 
     <key>RunAtLoad</key>
     <true/>

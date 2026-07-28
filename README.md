@@ -146,3 +146,13 @@ every source is snapshotted simultaneously). Station-point verification slightly
 favors high-resolution/post-processed sources (MET Nordic, FMI edited) over raw
 0.25° global models - that is the "what users experience" comparison, kept
 deliberately. GraphCast is absent: Open-Meteo's feed for it returns nulls (dead).
+
+### Why the schedule is 5-hourly, not 6
+
+The models issue new runs on a 6-hourly cycle (00/06/12/18 UTC). Sampling on
+that same period phase-locks the benchmark to a fixed point in every model's
+update cycle, so we would capture them at a *constant* staleness while Foreca
+(which refreshes far more often) stays near-fresh — a systematic handicap that
+more data cannot average out. A 5-hour interval does not divide 6, so successive
+snapshots precess through all six phases of the cycle within ~30 h, sampling
+fresh and stale runs evenly. Do not "tidy" this back to 6.
