@@ -15,7 +15,9 @@ same wall-clock moment, exactly like a user opening two weather apps side by sid
 
 Usage: python3 collect.py
 """
+import gzip
 import re
+import shutil
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -275,15 +277,30 @@ def main():
 
 def backup_daily(con):
     """One consistent DB copy per UTC day, keep the last 7 - the accrued
-    competitor snapshots are unrecoverable if the live file is lost."""
+    competitor snapshots are unrecoverable if the live file is lost.
+
+    Stored gzipped. The live DB passed 2.5 GB at ~4 weeks and grows ~60 MB a
+    day, so seven raw copies would have filled the host's disk within weeks and
+    taken the unrelated services on that box down with it. Compression puts a
+    copy at ~13% of the raw size, which keeps a week of history affordable.
+    """
     bdir = DATA_DIR / "backups"
     bdir.mkdir(exist_ok=True)
-    path = bdir / f"bench-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sqlite"
-    if not path.exists():
-        con.commit()
-        con.execute(f"VACUUM INTO '{path}'")
-        for old in sorted(bdir.glob("bench-*.sqlite"))[:-7]:
-            old.unlink()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    path = bdir / f"bench-{stamp}.sqlite.gz"
+    if path.exists():
+        return
+    con.commit()
+    # VACUUM INTO first (it needs a real file), then compress and drop the raw
+    # copy, so peak extra disk is one uncompressed DB rather than seven.
+    tmp = bdir / f"bench-{stamp}.tmp"
+    tmp.unlink(missing_ok=True)
+    con.execute(f"VACUUM INTO '{tmp}'")
+    with open(tmp, "rb") as src, gzip.open(path, "wb", compresslevel=1) as dst:
+        shutil.copyfileobj(src, dst, 1024 * 1024)
+    tmp.unlink()
+    for old in sorted(bdir.glob("bench-*.sqlite.gz"))[:-7]:
+        old.unlink()
 
 
 if __name__ == "__main__":
