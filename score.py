@@ -33,7 +33,12 @@ from common import get_db, DATA_DIR
 
 HKI = ZoneInfo("Europe/Helsinki")
 RAIN_THR = 0.1     # mm/h for occurrence skill
-N_BOOT = 2000
+# 10000, not 2000: the bootstrap p-value cannot go below 1/N_BOOT, and with a
+# Holm family of ~100 secondary cells the threshold alpha/m is ~5e-4 - i.e. the
+# old floor of 5e-4 was itself the binding constraint, so a real effect could
+# fail purely because the resampling could not express a smaller p. Cheap now
+# that a draw costs O(#dates) rather than O(#samples).
+N_BOOT = 10000
 BLOCK_LEN = 5      # bootstrap block: consecutive target dates (synoptic persistence)
 MIN_DAYS = 20      # min distinct target dates before "significant" may print
 ALPHA = 0.05
@@ -42,6 +47,13 @@ ALPHA = 0.05
 CANDIDATES = ["ecmwf_aifs025_single", "ecmwf_aifs_ens_mean", "best_match"]
 COMPETITORS = ["foreca", "fmi_edited"]
 PRIMARY = ("ecmwf_aifs025_single", "foreca", "pooled_1_7")
+# Derived blends (blend.py). They are tested as their OWN Holm family, kept
+# separate from the pre-registered one above: these were conceived after seeing
+# the data, and folding them in would inflate m and retroactively weaken the
+# pre-registered secondary cells. Their competitor set adds the best single
+# model, because "beats Foreca" is a much weaker claim than "beats AIFS".
+BLENDS = ["blend_mean", "blend_learned", "blend_ai"]
+BLEND_COMPETITORS = ["foreca", "fmi_edited", "ecmwf_aifs025_single"]
 
 
 def _utc(s: str) -> datetime:
@@ -219,6 +231,16 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
         return None, None, None
     rng = random.Random(42)
     n_blocks = max(1, math.ceil(nd / block_len))
+    # A date always enters a draw whole, and the statistic is
+    # (sum|e_cand| - sum|e_comp|) / n over the picked dates - so a date's
+    # per-date subtotals are sufficient. Aggregating once here makes a draw
+    # O(#dates) instead of O(#samples); at 200k+ pooled samples that is the
+    # difference between hours and seconds, with the same statistic.
+    agg = {d: (
+        sum(abs(ea) for ea, _ in ps),
+        sum(abs(eb) for _, eb in ps),
+        len(ps),
+    ) for d, ps in samples_by_date.items()}
     diffs = []
     for _ in range(n_boot):
         picked = []
@@ -229,10 +251,10 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
         sum_a = sum_b = 0.0
         n = 0
         for d in picked:
-            for ea, eb in samples_by_date[d]:
-                sum_a += abs(ea)
-                sum_b += abs(eb)
-                n += 1
+            sa, sb, cnt = agg[d]
+            sum_a += sa
+            sum_b += sb
+            n += cnt
         if n:
             diffs.append((sum_a - sum_b) / n)
     diffs.sort()
@@ -353,10 +375,12 @@ def print_board(title, results, unit="degC MAE", higher_better=False):
         print(row)
 
 
-def print_pairwise(all_pairs: dict):
-    print("\n=== Pairwise inference (hourly t2m, matched pairs, block bootstrap) ===")
+def print_pairwise(all_pairs: dict, title: str = "Pairwise inference", note: str = ""):
+    print(f"\n=== {title} (hourly t2m, matched pairs, block bootstrap) ===")
     print(f"negative diff = candidate better; PRIMARY = pre-registered endpoint;")
     print(f"sig requires >={MIN_DAYS} distinct days; secondary cells Holm-corrected")
+    if note:
+        print(note)
     for (cand, comp), leads in all_pairs.items():
         print(f"\n{cand} vs {comp}:")
         if not leads:
@@ -389,18 +413,29 @@ def main():
         for cand in CANDIDATES for comp in COMPETITORS
     }
     apply_significance(pairs)
+    blend_pairs = {
+        (cand, comp): pairwise(con, cand, comp)
+        for cand in BLENDS for comp in BLEND_COMPETITORS
+    }
+    # Corrected within itself - a separate family, never merged with the above.
+    apply_significance(blend_pairs)
 
     print_board("Hourly t2m by lead day", t2m)
     print_board("Hourly t2m, ALL sources rounded to integers (quantization sensitivity)", t2m_q)
     print_board("Hourly wind speed by lead day", ws, unit="m/s MAE")
     print_board("Rain occurrence (>=0.1mm/h) by lead day", rain_occ, unit="CSI, higher better", higher_better=True)
     print_board("Daily tmin/tmax/rain by lead day", daily, unit="degC / mm MAE")
-    print_pairwise(pairs)
+    print_pairwise(pairs, "Pairwise inference: pre-registered family")
+    if any(blend_pairs.values()):
+        print_pairwise(blend_pairs, "Pairwise inference: derived blends (EXPLORATORY)",
+                       "conceived after seeing the data - Holm-corrected as a separate family")
 
     (DATA_DIR / "prospective_results.json").write_text(json.dumps({
         "hourly_t2m": t2m, "hourly_t2m_quantized": t2m_q, "hourly_ws": ws,
         "rain_occurrence": rain_occ, "daily": daily,
         "pairwise_t2m": {f"{a}__vs__{b}": v for (a, b), v in pairs.items()},
+        "pairwise_t2m_blends_exploratory": {
+            f"{a}__vs__{b}": v for (a, b), v in blend_pairs.items()},
         "config": {"block_len": BLOCK_LEN, "min_days": MIN_DAYS, "alpha": ALPHA,
                    "primary": list(PRIMARY), "n_boot": N_BOOT},
     }, indent=2))
