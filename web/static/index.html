@@ -451,14 +451,23 @@ async function evidence(){
        best-of-column test (MAE: lower wins; rain CSI: higher wins) */
     const leads=[1,3,5,7];
     const mkTbl=(data,key,higher)=>{
-      const srcs=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null))
+      /* Sort and highlight at DISPLAY precision. The raw values can differ in
+         the third decimal while both rows print the same number - unrounded
+         comparison then orders a sub-display-precision "winner" above Ilma
+         and paints only its cells as best, which reads as a contradiction.
+         Ties at two decimals are real ties; the sort is stable, so listing
+         blend_mean first makes it win them. */
+      const r2=v=>Math.round(v*100);
+      const keys=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null));
+      const srcs=["blend_mean",...keys.filter(s=>s!=="blend_mean")]
+        .filter(s=>keys.includes(s))
         .sort((a,b)=>{const av=data[a]["3"]?.[key]??(higher?-9:99),bv=data[b]["3"]?.[key]??(higher?-9:99);
-          return higher?bv-av:av-bv;});
-      const best={};leads.forEach(l=>{const vs=srcs.map(s=>data[s][l]?.[key]).filter(v=>v!=null);
+          return higher?r2(bv)-r2(av):r2(av)-r2(bv);});
+      const best={};leads.forEach(l=>{const vs=srcs.map(s=>data[s][l]?.[key]).filter(v=>v!=null).map(r2);
         best[l]=higher?Math.max(...vs):Math.min(...vs)});
       const rows=srcs.map(s=>`<tr class="${s==="blend_mean"?"us":""}"><td>${NICE[s]||s}</td>`+
         leads.map(l=>{const x=data[s][l]?.[key];
-          return `<td class="${x!=null&&Math.abs(x-best[l])<1e-9?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
+          return `<td class="${x!=null&&r2(x)===best[l]?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
       return `<table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Päivä ${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
     };
     $("#trustbody").innerHTML=`<div id="away"></div><div class="cols">
