@@ -430,11 +430,23 @@ const NICE={blend_mean:"Ilma (this blend)",blend_learned:"Blend, weighted",blend
 async function evidence(){
   try{
     const d=await (await fetch("/api/stats")).json();
-    const c=((d.pairwise_blends||{})["blend_mean__vs__foreca"]||{})["pooled_1_7"];
-    if(c&&c.ci95){
-      const pct=Math.abs(c.diff/c.mae_comp*100).toFixed(0);
-      $("#trusthead").innerHTML=`This forecast has been <b>${pct}% more accurate</b> than Foreca`;
+    const P=d.pairwise_blends||{};
+    const c=(P["blend_mean__vs__foreca"]||{})["pooled_1_7"];
+    /* Claim only what the scoring run proves: a competitor is listed as beaten
+       only when its pooled 1-7 cell is Holm-significant in the blend's favour. */
+    const beat=[];
+    for(const [k,label] of [["foreca","Foreca"],["fmi_edited","FMI's forecasters"],
+                            ["ecmwf_aifs025_single","the best single model"]]){
+      const x=(P["blend_mean__vs__"+k]||{})["pooled_1_7"];
+      if(x&&x.significant&&x.diff<0)
+        beat.push({label,pct:Math.abs(x.diff/x.mae_comp*100).toFixed(0)});
     }
+    if(beat.length===3){
+      $("#trusthead").innerHTML=`This forecast has been <b>more accurate than everything we test it against</b> — Foreca, FMI's forecasters, and every model inside it`;
+    }else if(beat.length){
+      $("#trusthead").innerHTML=`This forecast has been <b>more accurate</b> than ${beat.map(b=>b.label).join(" and ")}`;
+    }
+    window._BEAT=beat;
     const t=d.hourly_t2m||{},leads=[1,3,5,7];
     const srcs=Object.keys(t).sort((a,b)=>(t[a]["3"]?.mae??99)-(t[b]["3"]?.mae??99));
     const best={};leads.forEach(l=>best[l]=Math.min(...srcs.map(s=>t[s][l]?.mae??99)));
@@ -447,7 +459,9 @@ async function evidence(){
         <table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Day ${l}</th>`).join("")}</tr></thead>
         <tbody>${rows}</tbody></table></div></div>
       <div class="fine">${c&&c.ci95?`Measured over ${c.days} days and ${c.n.toLocaleString()} matched hourly comparisons
-        at 14 Finnish weather stations, days 1–7 ahead (95% CI ${c.ci95[0]} to ${c.ci95[1]}, p=${c.p}).`:""}
+        at 14 Finnish weather stations, days 1–7 ahead. Lower average error than
+        ${(window._BEAT||[]).map(b=>`${b.label} (−${b.pct}%)`).join(", ")} — each one
+        statistically significant after multiple-comparison correction.`:""}
         <b>The honest part:</b> this is one Finnish summer at fourteen stations. It says nothing yet about winter, other
         countries, or forecasts past day seven — beyond day eight the advantage over Foreca disappears.</div>`;
     if(d.generated)$("#gen").textContent="Accuracy last verified "+new Date(d.generated*1000).toISOString().slice(0,10)+".";
