@@ -40,7 +40,10 @@ body{
 }
 .sky>*{position:relative;z-index:2}
 
-nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap}
+/* Every .rise element keeps a stacking context (animated opacity/transform,
+   fill:forwards), so siblings paint in DOM order and the search dropdown's
+   z-index only counts inside nav. Lift nav itself above the later sections. */
+nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;position:relative;z-index:100}
 .brand{font-family:var(--display);font-size:23px;font-weight:600;letter-spacing:-.02em;
   font-variation-settings:"SOFT" 40,"WONK" 1;white-space:nowrap}
 .finder{position:relative;flex:1;min-width:220px;max-width:380px}
