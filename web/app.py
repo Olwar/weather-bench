@@ -22,6 +22,7 @@ are the same estimator.
 import json
 import os
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -194,8 +195,11 @@ def build_forecast(lat: float, lon: float) -> dict:
 @app.get("/api/geocode")
 def geocode(q: str = Query(min_length=2, max_length=80)):
     def go():
+        # quote() is load-bearing: FastAPI hands us the DECODED query, so a
+        # space or any non-ASCII letter pasted raw into the upstream URL makes
+        # urllib reject the request - "järvelä" and "new york" both 502'd.
         d = http_json("https://geocoding-api.open-meteo.com/v1/search"
-                      f"?name={q}&count=8&language=en&format=json")
+                      f"?name={urllib.parse.quote(q)}&count=8&language=en&format=json")
         return [{"name": r["name"], "country": r.get("country", ""),
                  "admin1": r.get("admin1", ""),
                  "lat": r["latitude"], "lon": r["longitude"]}
