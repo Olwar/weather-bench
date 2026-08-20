@@ -422,7 +422,7 @@ function week(hs){
 }
 
 /* trust strip */
-const NICE={blend_mean:"Ilma (tämä yhdistelmä)",blend_learned:"Painotettu yhdistelmä",blend_ai:"Tekoälymallien yhdistelmä",
+const NICE={blend_open:"Ilma (tämä yhdistelmä)",blend_mean:"Yhdistelmä + Foreca",blend_learned:"Painotettu yhdistelmä",blend_ai:"Tekoälymallien yhdistelmä",
   fmi_edited:"Ilmatieteen laitos",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
   ecmwf_aifs_ens_mean:"AIFS-parvi",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
   metno_nordic:"MET Nordic"};
@@ -431,13 +431,13 @@ async function evidence(){
   try{
     const d=await (await fetch("/api/stats")).json();
     const P=d.pairwise_blends||{};
-    const c=(P["blend_mean__vs__foreca"]||{})["pooled_1_7"];
+    const c=(P["blend_open__vs__foreca"]||{})["pooled_1_7"];
     /* Claim only what the scoring run proves: a competitor is listed as beaten
        only when its pooled 1-7 cell is Holm-significant in the blend's favour. */
     const beat=[];
     for(const [k,label] of [["foreca","Foreca"],["fmi_edited","Ilmatieteen laitoksen meteorologit"],
                             ["ecmwf_aifs025_single","paras yksittäinen malli"]]){
-      const x=(P["blend_mean__vs__"+k]||{})["pooled_1_7"];
+      const x=(P["blend_open__vs__"+k]||{})["pooled_1_7"];
       if(x&&x.significant&&x.diff<0)
         beat.push({label,pct:Math.abs(x.diff/x.mae_comp*100).toFixed(0)});
     }
@@ -459,13 +459,13 @@ async function evidence(){
          blend_mean first makes it win them. */
       const r2=v=>Math.round(v*100);
       const keys=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null));
-      const srcs=["blend_mean",...keys.filter(s=>s!=="blend_mean")]
+      const srcs=["blend_open",...keys.filter(s=>s!=="blend_open")]
         .filter(s=>keys.includes(s))
         .sort((a,b)=>{const av=data[a]["3"]?.[key]??(higher?-9:99),bv=data[b]["3"]?.[key]??(higher?-9:99);
           return higher?r2(bv)-r2(av):r2(av)-r2(bv);});
       const best={};leads.forEach(l=>{const vs=srcs.map(s=>data[s][l]?.[key]).filter(v=>v!=null).map(r2);
         best[l]=higher?Math.max(...vs):Math.min(...vs)});
-      const rows=srcs.map(s=>`<tr class="${s==="blend_mean"?"us":""}"><td>${NICE[s]||s}</td>`+
+      const rows=srcs.map(s=>`<tr class="${s==="blend_open"?"us":""}"><td>${NICE[s]||s}</td>`+
         leads.map(l=>{const x=data[s][l]?.[key];
           return `<td class="${x!=null&&r2(x)===best[l]?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
       return `<table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Päivä ${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;

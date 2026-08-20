@@ -45,6 +45,12 @@ MEMBERS = [
     "metno_nordic",
 ]
 AI_MEMBERS = ["ecmwf_aifs025_single", "ecmwf_aifs_ens_mean"]
+# The blend a commercial product may actually serve: everything except Foreca,
+# whose feed is scraped without a license. This is the estimator the live site
+# ships, so IT is the one whose verified numbers the site must cite - quoting
+# blend_mean (Foreca included) for a product that excludes Foreca would be
+# claiming a different forecast's accuracy. Costs ~0.01 degC pooled 1-7.
+OPEN_MEMBERS = [m for m in MEMBERS if m != "foreca"]
 VARS = ("t2m", "ws", "rain1h")
 
 MIN_MEMBERS = 2      # below this it is not a blend, it is one source with a new name
@@ -187,6 +193,8 @@ def main():
     print(f"  blend_mean    {n1:>9,} rows", flush=True)
     n2 = unweighted(con, "blend_ai", AI_MEMBERS)
     print(f"  blend_ai      {n2:>9,} rows", flush=True)
+    n4 = unweighted(con, "blend_open", OPEN_MEMBERS)
+    print(f"  blend_open    {n4:>9,} rows", flush=True)
     print("  training walk-forward weights...", flush=True)
     w = train_weights(con)
     n3 = learned(con, w)

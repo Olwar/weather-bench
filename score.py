@@ -52,7 +52,7 @@ PRIMARY = ("ecmwf_aifs025_single", "foreca", "pooled_1_7")
 # the data, and folding them in would inflate m and retroactively weaken the
 # pre-registered secondary cells. Their competitor set adds the best single
 # model, because "beats Foreca" is a much weaker claim than "beats AIFS".
-BLENDS = ["blend_mean", "blend_learned", "blend_ai"]
+BLENDS = ["blend_mean", "blend_learned", "blend_ai", "blend_open"]
 BLEND_COMPETITORS = ["foreca", "fmi_edited", "ecmwf_aifs025_single"]
 
 
