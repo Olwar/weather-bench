@@ -1,0 +1,10 @@
+[Unit]
+Description=weather-bench snapshot collection
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/weather-bench
+Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
+ExecStart=/opt/weather-bench/.venv/bin/python /opt/weather-bench/collect.py
+# This box runs other services; a runaway must never OOM them.
+MemoryMax=800M

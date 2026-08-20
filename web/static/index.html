@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ilma</title>
+<meta name="description" content="A weather app that averages six forecast models and shows you how much they agree.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&family=Karla:ital,wght@0,300..700;1,300..500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF6EF; --paper-2:#F3EDE3; --paper-3:#EBE3D6;
+  --ink:#181513; --ink-2:#544A42; --ink-3:#8A7D72;
+  --rule:#DCD2C3; --rule-2:#C8BCA9;
+  --cold:#3E6E9E; --mild:#4E7F63; --warm:#C0592A;
+  --accent:var(--mild);
+  --sky-a:#8FB4D4; --sky-b:#C9D9E4;
+  --display:"Fraunces",Georgia,serif;
+  --body:"Karla",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;
+  line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 clamp(18px,4vw,44px)}
+::selection{background:var(--ink);color:var(--paper)}
+
+/* ═══ sky ═══ */
+.sky{
+  position:relative;overflow:hidden;
+  background:linear-gradient(170deg,var(--sky-a) 0%,var(--sky-b) 70%,var(--paper) 100%);
+  transition:background 1.4s ease;
+}
+.sky::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.25;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.sky>*{position:relative;z-index:2}
+
+nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:23px;font-weight:600;letter-spacing:-.02em;
+  font-variation-settings:"SOFT" 40,"WONK" 1;white-space:nowrap}
+.finder{position:relative;flex:1;min-width:220px;max-width:380px}
+.finder input{
+  width:100%;background:rgba(250,246,239,.36);border-radius:99px;
+  border:1px solid rgba(24,21,19,.14);
+  color:var(--ink);font-family:var(--body);font-size:15px;
+  padding:9px 18px 9px 38px;outline:none;transition:background .3s,border-color .3s;
+}
+.finder input:focus{background:rgba(250,246,239,.8);border-color:rgba(24,21,19,.3)}
+.finder input::placeholder{color:rgba(24,21,19,.45)}
+.finder .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);opacity:.5;font-size:14px;pointer-events:none}
+.res{
+  position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--paper);
+  border:1px solid var(--rule);z-index:60;max-height:320px;overflow-y:auto;display:none;
+  box-shadow:0 24px 54px -16px rgba(24,21,19,.32);border-radius:14px;
+}
+.res.on{display:block;animation:drop .28s cubic-bezier(.2,.8,.2,1)}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}}
+.res button{
+  display:block;width:100%;text-align:left;background:none;border:0;cursor:pointer;
+  padding:11px 16px;font-family:var(--body);font-size:15px;color:var(--ink);
+  border-bottom:1px solid var(--paper-3);transition:background .15s;
+}
+.res button:last-child{border-bottom:0}
+.res button:hover{background:var(--paper-2)}
+.res b{font-weight:600}
+.res i{font-style:normal;color:var(--ink-3);font-size:12.5px;display:block}
+
+/* ═══ current ═══ */
+.now{display:flex;justify-content:space-between;align-items:center;gap:20px;
+  padding:clamp(26px,5vw,48px) 0 clamp(18px,3vw,28px);flex-wrap:wrap}
+.loc .city{font-family:var(--display);font-size:clamp(34px,5.6vw,58px);font-weight:340;
+  line-height:1;letter-spacing:-.03em;font-variation-settings:"SOFT" 30,"WONK" 1}
+.loc .sub{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-top:8px}
+.big{display:flex;align-items:center;gap:clamp(14px,3vw,30px)}
+.big .n{font-family:var(--display);font-size:clamp(84px,13vw,140px);font-weight:300;
+  line-height:.82;letter-spacing:-.05em;font-variation-settings:"SOFT" 20}
+.big .n sup{font-size:.22em;vertical-align:2.4em;opacity:.36;margin-left:.05em;line-height:0}
+.big .side{font-size:14.5px;color:var(--ink-2);line-height:2}
+.big .side b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.cond{display:flex;align-items:center;gap:8px;font-family:var(--display);font-style:italic;
+  font-size:16.5px;color:var(--ink);margin-bottom:4px}
+.cond svg{width:22px;height:22px;stroke:var(--ink)}
+.strip-verdict{padding-bottom:22px;font-size:14.5px;color:var(--ink-2)}
+.strip-verdict .v{font-family:var(--display);font-style:italic;font-size:16.5px;color:var(--ink)}
+.strip-verdict .v::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);margin-right:8px;vertical-align:middle}
+
+/* ═══ hourly strip ═══ */
+.hours-wrap{padding-bottom:28px}
+.hours{display:flex;overflow-x:auto;scrollbar-width:none;
+  border-radius:16px;background:rgba(250,246,239,.4);border:1px solid rgba(24,21,19,.1)}
+.hours::-webkit-scrollbar{display:none}
+.hr{flex:0 0 64px;text-align:center;padding:14px 0 12px;border-right:1px solid rgba(24,21,19,.07)}
+.hr:last-child{border-right:0}
+.hr .t{font-size:12px;color:var(--ink-2)}
+.hr .ic{margin:7px 0 3px}
+.hr .ic svg{width:21px;height:21px;stroke:var(--ink);opacity:.75;margin:0 auto}
+.hr .v{font-family:var(--display);font-size:21px;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.hr .r{font-size:11.5px;color:var(--cold);min-height:15px}
+.hr.nowh{background:rgba(24,21,19,.06)}
+
+/* ═══ sections ═══ */
+section{padding:clamp(26px,4.5vw,44px) 0 0}
+.label{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:16px}
+
+/* chart */
+.plot{position:relative}
+svg{display:block;width:100%;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--paper);
+  padding:9px 13px;font-size:13px;line-height:1.45;opacity:0;transition:opacity .18s;
+  white-space:nowrap;z-index:20;border-radius:10px;box-shadow:0 14px 30px -10px rgba(24,21,19,.5)}
+.tip .t{font-family:var(--display);font-size:19px;display:block}
+.tip .s{opacity:.65;font-size:12px}
+.tip.on{opacity:1}
+
+/* days */
+.week{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.d{padding:16px 6px 18px;border-right:1px solid var(--rule);text-align:center;transition:background .25s}
+.d:last-child{border-right:0}
+.d:hover{background:var(--paper-2)}
+.d .wd{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.d .dm{font-size:11.5px;color:var(--ink-3);opacity:.7;margin-bottom:8px}
+.d .ic{margin-bottom:8px}
+.d .ic svg{width:26px;height:26px;stroke:var(--ink);opacity:.75;margin:0 auto}
+.d .mx{font-family:var(--display);font-size:29px;font-weight:360;line-height:1;font-variant-numeric:tabular-nums}
+.d .mn{font-size:13.5px;color:var(--ink-3);margin-top:2px;font-variant-numeric:tabular-nums}
+.d .rn{margin-top:10px;font-size:12px;color:var(--cold);min-height:16px;font-variant-numeric:tabular-nums}
+
+/* ═══ trust strip ═══ */
+.trust{margin:clamp(38px,6vw,60px) 0 0;background:var(--ink);color:var(--paper);border-radius:18px;overflow:hidden}
+.trust summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  gap:18px;padding:20px 26px;font-size:15px;flex-wrap:wrap;
+}
+.trust summary::-webkit-details-marker{display:none}
+.trust summary .h{font-family:var(--display);font-size:17.5px;font-style:italic}
+.trust summary .h b{color:#E8B98A;font-weight:500}
+.trust summary .m{font-size:13px;color:rgba(250,246,239,.55)}
+.trust summary .chev{display:inline-block;transition:transform .3s;opacity:.6}
+.trust[open] summary .chev{transform:rotate(180deg)}
+.trust .inner{padding:6px 26px 28px;border-top:1px solid rgba(250,246,239,.12)}
+.trust .cols{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,54px);padding-top:22px}
+.trust h4{font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(250,246,239,.45);
+  font-weight:400;margin-bottom:14px}
+.mrow{display:grid;grid-template-columns:minmax(96px,140px) 1fr auto;gap:14px;align-items:center;
+  padding:8px 0;border-bottom:1px solid rgba(250,246,239,.08);font-size:13.5px}
+.mrow:last-child{border-bottom:0}
+.mrow .nm{color:rgba(250,246,239,.65)}
+.mbar{position:relative;height:1px;background:rgba(250,246,239,.2)}
+.mpt{position:absolute;top:50%;width:8px;height:8px;border-radius:50%;background:#E8B98A;transform:translate(-50%,-50%)}
+.mrow .vv{font-variant-numeric:tabular-nums;color:var(--paper)}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.tbl th{text-align:right;padding:0 0 9px;font-weight:400;font-size:11.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(250,246,239,.4);border-bottom:1px solid rgba(250,246,239,.14)}
+.tbl th:first-child{text-align:left}
+.tbl td{text-align:right;padding:8px 0;border-bottom:1px solid rgba(250,246,239,.07);color:rgba(250,246,239,.68)}
+.tbl td:first-child{text-align:left}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.us td{color:var(--paper)}
+.tbl tr.us td:first-child{font-weight:600}
+.tbl td.b{color:#E8B98A}
+.fine{margin-top:18px;font-size:13px;color:rgba(250,246,239,.48);line-height:1.75;max-width:70ch}
+.fine b{color:#E8B98A;font-weight:400;font-style:italic;font-family:var(--display)}
+.away{border-left:2px solid #E8B98A;padding:2px 0 2px 16px;margin-top:20px;
+  font-size:13.5px;color:rgba(250,246,239,.62);line-height:1.65;max-width:64ch}
+.away b{color:var(--paper);font-weight:500}
+
+footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
+.load{color:var(--ink-3);font-style:italic;padding:16px 0}
+.bad{color:var(--warm);padding:16px 0}
+.rise{opacity:0;transform:translateY(14px);animation:rise .8s cubic-bezier(.2,.75,.25,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+@media (max-width:760px){
+  .now{flex-direction:column;align-items:flex-start;gap:14px}
+  .trust .cols{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="sky" id="sky">
+  <div class="wrap">
+    <nav class="rise">
+      <div class="brand">Ilma</div>
+      <div class="finder">
+        <span class="ic">◍</span>
+        <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Search any place…">
+        <div class="res" id="res"></div>
+      </div>
+    </nav>
+
+    <div class="now">
+      <div class="loc rise" style="animation-delay:.08s">
+        <div class="city" id="city">—</div>
+        <div class="sub" id="loc">—</div>
+      </div>
+      <div class="big rise" style="animation-delay:.14s">
+        <div class="n" id="deg">–</div>
+        <div class="side" id="side"></div>
+      </div>
+    </div>
+    <div class="strip-verdict rise" style="animation-delay:.2s" id="verdict"></div>
+
+    <div class="hours-wrap rise" style="animation-delay:.26s">
+      <div class="hours" id="hours"></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<section>
+  <div class="label">Next 7 days · the shaded band shows how much the six models disagree</div>
+  <div class="plot"><div class="tip" id="tip"></div><div id="chart" class="load">loading…</div></div>
+</section>
+
+<section>
+  <div class="label">Two weeks</div>
+  <div class="week" id="days"></div>
+</section>
+
+<details class="trust" id="trust">
+  <summary>
+    <span class="h" id="trusthead">Why trust this forecast?</span>
+    <span class="m">Verified against real weather stations · tap for the numbers <span class="chev">▾</span></span>
+  </summary>
+  <div class="inner" id="trustbody"><div class="load">loading…</div></div>
+</details>
+
+<footer>
+  <div>Ilma averages six forecast models — ECMWF AIFS &amp; its ensemble, ECMWF IFS, MET Nordic, FMI and Open-Meteo — and verifies the result against 14 Finnish weather stations. <span id="gen"></span></div>
+</footer>
+
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let CUR=null;
+
+/* line icons drawn to match the type - stroke only, no fills */
+const _S='fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+const _CLOUD='M7.5 18h8.7a4 4 0 0 0 .6-7.96A5.6 5.6 0 0 0 6 8.5 4.3 4.3 0 0 0 7.5 18Z';
+function _rays(cx,cy,r1,r2){let o="";for(let a=0;a<360;a+=45){const q=a*Math.PI/180;
+  o+=`<line x1="${(cx+r1*Math.cos(q)).toFixed(1)}" y1="${(cy+r1*Math.sin(q)).toFixed(1)}" x2="${(cx+r2*Math.cos(q)).toFixed(1)}" y2="${(cy+r2*Math.sin(q)).toFixed(1)}"/>`}return o}
+const ICO={
+  sun:`<svg viewBox="0 0 24 24" ${_S}><circle cx="12" cy="12" r="4.2"/>${_rays(12,12,6.6,8.8)}</svg>`,
+  moon:`<svg viewBox="0 0 24 24" ${_S}><path d="M19.5 14.2A7.6 7.6 0 1 1 9.8 4.5a6.2 6.2 0 0 0 9.7 9.7Z"/></svg>`,
+  psun:`<svg viewBox="0 0 24 24" ${_S}><circle cx="8.5" cy="8" r="2.9"/>${_rays(8.5,8,4.6,6.2)}<path d="M10 19h7.2a3.3 3.3 0 0 0 .5-6.57A4.6 4.6 0 0 0 8.8 11.2 3.6 3.6 0 0 0 10 19Z" fill="var(--paper)"/></svg>`,
+  pmoon:`<svg viewBox="0 0 24 24" ${_S}><path d="M14.5 8.3A4.6 4.6 0 1 1 8.6 2.4a3.8 3.8 0 0 0 5.9 5.9Z"/><path d="M10 19h7.2a3.3 3.3 0 0 0 .5-6.57A4.6 4.6 0 0 0 8.8 11.2 3.6 3.6 0 0 0 10 19Z" fill="var(--paper)"/></svg>`,
+  cloud:`<svg viewBox="0 0 24 24" ${_S}><path d="${_CLOUD}"/></svg>`,
+  drizzle:`<svg viewBox="0 0 24 24" ${_S}><path d="${_CLOUD}" transform="translate(0,-3.2)"/><line x1="9.5" y1="17.6" x2="8.9" y2="20.2"/><line x1="14.2" y1="17.6" x2="13.6" y2="20.2"/></svg>`,
+  rain:`<svg viewBox="0 0 24 24" ${_S}><path d="${_CLOUD}" transform="translate(0,-3.2)"/><line x1="8" y1="17.6" x2="7.2" y2="20.8"/><line x1="12" y1="17.6" x2="11.2" y2="20.8"/><line x1="16" y1="17.6" x2="15.2" y2="20.8"/></svg>`
+};
+/* rain wins, then clouds, then clear - day/night picks sun vs moon */
+function cond(h){
+  const rain=h.rain1h?h.rain1h.blend:0;
+  const cc=h.cc?h.cc.blend:null;
+  const day=h.isday?h.isday.blend>=.5:(+h.time.slice(11,13)>=7&&+h.time.slice(11,13)<21);
+  if(rain>=0.8)return{ic:ICO.rain,w:"Rain"};
+  if(rain>=0.1)return{ic:ICO.drizzle,w:"Light rain"};
+  if(cc==null)return{ic:day?ICO.sun:ICO.moon,w:day?"Clear":"Clear night"};
+  if(cc>=75)return{ic:ICO.cloud,w:"Overcast"};
+  if(cc>=35)return{ic:day?ICO.psun:ICO.pmoon,w:"Partly cloudy"};
+  return{ic:day?ICO.sun:ICO.moon,w:day?"Sunny":"Clear night"};
+}
+
+const SKIES=[
+  [0,"#2B3A55","#5A6B85"],[5,"#5C6E92","#D8A489"],[7,"#94B3D0","#E4D3C0"],
+  [10,"#8FB4D4","#C9D9E4"],[16,"#9DBBD3","#DCD6C8"],[19,"#C98F6E","#E6C3A5"],
+  [21,"#4A5878","#8A93A8"],[23,"#2B3A55","#5A6B85"]
+];
+function sky(h,cc,rain){let a=SKIES[0];for(const s of SKIES)if(h>=s[0])a=s;
+  const day=h>=7&&h<21;
+  if(day&&rain>=0.1)a=[0,"#7C8794","#B4BBC2"];
+  else if(day&&cc!=null&&cc>=75)a=[0,"#98A2AC","#C9CDD1"];
+  document.documentElement.style.setProperty("--sky-a",a[1]);
+  document.documentElement.style.setProperty("--sky-b",a[2]);}
+function accent(t){document.documentElement.style.setProperty("--accent",
+  t<=2?"var(--cold)":t>=18?"var(--warm)":"var(--mild)");}
+
+/* search */
+let tmr=null;
+$("#q").addEventListener("input",e=>{
+  clearTimeout(tmr);const v=e.target.value.trim();
+  if(v.length<2){$("#res").classList.remove("on");return}
+  tmr=setTimeout(()=>find(v),250);
+});
+async function find(v){
+  try{
+    const d=await (await fetch(`/api/geocode?q=${encodeURIComponent(v)}`)).json();
+    const box=$("#res");
+    if(!d.results||!d.results.length){box.classList.remove("on");return}
+    box.innerHTML="";
+    d.results.forEach(p=>{
+      const b=document.createElement("button");
+      const sub=[p.admin1,p.country].filter(Boolean).join(", ");
+      b.innerHTML=`<b>${p.name}</b><i>${sub}</i>`;
+      b.onclick=()=>{box.classList.remove("on");$("#q").value="";$("#q").blur();load(p.lat,p.lon,p.name,sub)};
+      box.appendChild(b);
+    });
+    box.classList.add("on");
+  }catch(e){}
+}
+document.addEventListener("click",e=>{if(!e.target.closest(".finder"))$("#res").classList.remove("on")});
+
+async function load(lat,lon,name,sub){
+  $("#city").textContent=name;$("#loc").textContent=sub||"";
+  localStorage.setItem("ilma",JSON.stringify({lat,lon,name,sub}));
+  try{
+    const r=await fetch(`/api/forecast?lat=${lat}&lon=${lon}`);
+    if(!r.ok)throw new Error("upstream "+r.status);
+    CUR=await r.json();paint();
+  }catch(e){$("#chart").className="bad";$("#chart").textContent="Could not load this place: "+e.message}
+}
+const localKey=o=>new Date(Date.now()+o*1000).toISOString().slice(0,13);
+
+function paint(){
+  const d=CUR,hrs=d.hours.filter(h=>h.t2m);
+  let i=hrs.findIndex(h=>h.time.slice(0,13)>=localKey(d.utc_offset_seconds));if(i<0)i=0;
+  const h=hrs[i];if(!h)return;
+
+  const c0=cond(h);
+  sky(+h.time.slice(11,13),h.cc?h.cc.blend:null,h.rain1h?h.rain1h.blend:0);
+  accent(h.t2m.blend);
+  $("#deg").innerHTML=h.t2m.blend.toFixed(1)+"<sup>°</sup>";
+  $("#side").innerHTML=
+    `<div class="cond">${c0.ic}${c0.w}</div>`+
+    (h.ws?`Wind <b>${h.ws.blend.toFixed(1)} m/s</b><br>`:"")+
+    (h.rain1h!=null?`Rain <b>${h.rain1h.blend.toFixed(1)} mm/h</b><br>`:"")+
+    `Range <b>${h.t2m.lo.toFixed(0)}–${h.t2m.hi.toFixed(0)}°</b>`;
+
+  const w=h.t2m.hi-h.t2m.lo;
+  const verdict=w<1?"Models agree closely":w<2.2?"Models mostly agree":"Models disagree — less certain than usual";
+  $("#verdict").innerHTML=`<span class="v">${verdict} · ±${(w/2).toFixed(1)}°</span>`;
+
+  /* hourly strip: next 24h */
+  $("#hours").innerHTML=hrs.slice(i,i+24).map((x,j)=>{
+    const hh=x.time.slice(11,13),cx=cond(x);
+    return `<div class="hr${j===0?" nowh":""}">
+      <div class="t">${j===0?"Now":hh}</div>
+      <div class="ic">${cx.ic}</div>
+      <div class="v">${x.t2m.blend.toFixed(0)}°</div>
+      <div class="r">${x.rain1h&&x.rain1h.blend>=0.1?x.rain1h.blend.toFixed(1):""}</div></div>`;
+  }).join("");
+
+  chart(hrs.slice(i,i+168));week(hrs);members();away();
+}
+
+function chart(hs){
+  if(hs.length<2)return;
+  const W=1100,H=260,P={t:20,r:8,b:38,l:38};
+  const mnv=Math.min(...hs.map(h=>h.t2m.lo)),mxv=Math.max(...hs.map(h=>h.t2m.hi));
+  const pad=(mxv-mnv)*.18||1,mn=mnv-pad,mx=mxv+pad;
+  const X=i=>P.l+i*(W-P.l-P.r)/(hs.length-1),Y=v=>P.t+(mx-v)/(mx-mn)*(H-P.t-P.b);
+  const line=hs.map((h,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(h.t2m.blend).toFixed(1)}`).join(" ");
+  const band=hs.map((h,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(h.t2m.hi).toFixed(1)}`).join(" ")+" "+
+    hs.map((h,i)=>hs.length-1-i).map(j=>`L${X(j).toFixed(1)} ${Y(hs[j].t2m.lo).toFixed(1)}`).join(" ")+"Z";
+  let grid="",step=Math.max(1,Math.round((mx-mn)/4));
+  for(let v=Math.ceil(mn/step)*step;v<mx;v+=step)
+    grid+=`<line x1="${P.l}" y1="${Y(v)}" x2="${W-P.r}" y2="${Y(v)}" stroke="#DCD2C3"/>
+      <text x="${P.l-10}" y="${Y(v)+4}" fill="#8A7D72" font-size="12" text-anchor="end" font-family="Karla">${v}°</text>`;
+  let mid="";
+  hs.forEach((h,i)=>{if(h.time.slice(11,13)==="00"&&i>2)
+    mid+=`<line x1="${X(i)}" y1="${P.t-6}" x2="${X(i)}" y2="${H-P.b}" stroke="#C8BCA9" stroke-dasharray="1 5"/>
+      <text x="${X(i)+8}" y="${H-P.b+20}" fill="#8A7D72" font-size="12" font-family="Karla">${
+        new Date(h.time+"Z").toLocaleDateString("en",{weekday:"short",timeZone:"UTC"})}</text>`});
+  $("#chart").className="";
+  $("#chart").innerHTML=`<svg viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="rib" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity=".24"/>
+      <stop offset="100%" stop-color="var(--accent)" stop-opacity=".06"/>
+    </linearGradient></defs>
+    ${grid}${mid}
+    <path d="${band}" fill="url(#rib)"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line id="cx" x1="0" y1="${P.t-6}" x2="0" y2="${H-P.b}" stroke="var(--ink)" stroke-width="1" opacity="0"/>
+    <circle id="cd" r="5" fill="var(--ink)" opacity="0"/>
+  </svg>`;
+  const svg=$("#chart svg"),tip=$("#tip"),cx=$("#cx"),cd=$("#cd");
+  svg.addEventListener("mousemove",e=>{
+    const b=svg.getBoundingClientRect();
+    let i=Math.round(((e.clientX-b.left)/b.width*W-P.l)/((W-P.l-P.r)/(hs.length-1)));
+    i=Math.max(0,Math.min(hs.length-1,i));const h=hs[i];
+    cx.setAttribute("x1",X(i));cx.setAttribute("x2",X(i));cx.setAttribute("opacity",".26");
+    cd.setAttribute("cx",X(i));cd.setAttribute("cy",Y(h.t2m.blend));cd.setAttribute("opacity","1");
+    tip.classList.add("on");
+    tip.innerHTML=`<span class="t">${h.t2m.blend.toFixed(1)}°</span>
+      <span class="s">${new Date(h.time+"Z").toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"})} ${h.time.slice(11,16)}
+      · range ${h.t2m.lo.toFixed(1)}–${h.t2m.hi.toFixed(1)}°</span>`;
+    const px=X(i)/W*b.width;
+    tip.style.left=Math.min(b.width-tip.offsetWidth,Math.max(0,px-tip.offsetWidth/2))+"px";
+    tip.style.top="-10px";
+  });
+  svg.addEventListener("mouseleave",()=>{tip.classList.remove("on");cx.setAttribute("opacity","0");cd.setAttribute("opacity","0")});
+}
+
+function week(hs){
+  const by={};hs.forEach(h=>{(by[h.time.slice(0,10)]=by[h.time.slice(0,10)]||[]).push(h)});
+  $("#days").innerHTML=Object.entries(by).slice(0,14).map(([d,l])=>{
+    const t=l.map(h=>h.t2m.blend),r=l.filter(h=>h.rain1h).reduce((a,h)=>a+h.rain1h.blend,0);
+    const dayh=l.filter(h=>h.isday?h.isday.blend>=.5:(+h.time.slice(11,13)>=8&&+h.time.slice(11,13)<20));
+    const ccs=(dayh.length?dayh:l).filter(h=>h.cc);
+    const cc=ccs.length?ccs.reduce((a,h)=>a+h.cc.blend,0)/ccs.length:null;
+    const ic=r>=2?ICO.rain:r>=0.4?ICO.drizzle:cc==null?ICO.sun:cc>=75?ICO.cloud:cc>=35?ICO.psun:ICO.sun;
+    const dt=new Date(d+"T00:00:00Z");
+    return `<div class="d">
+      <div class="wd">${dt.toLocaleDateString("en",{weekday:"short",timeZone:"UTC"})}</div>
+      <div class="dm">${dt.getUTCDate()}.${dt.getUTCMonth()+1}.</div>
+      <div class="ic">${ic}</div>
+      <div class="mx">${Math.max(...t).toFixed(0)}°</div>
+      <div class="mn">${Math.min(...t).toFixed(0)}°</div>
+      <div class="rn">${r>=.1?r.toFixed(1)+" mm":""}</div></div>`}).join("");
+}
+
+/* trust strip */
+const NICE={blend_mean:"Ilma (this blend)",blend_learned:"Blend, weighted",blend_ai:"AI-only blend",
+  fmi_edited:"FMI forecasters",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
+  ecmwf_aifs_ens_mean:"AIFS ensemble",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
+  metno_nordic:"MET Nordic"};
+
+async function evidence(){
+  try{
+    const d=await (await fetch("/api/stats")).json();
+    const c=((d.pairwise_blends||{})["blend_mean__vs__foreca"]||{})["pooled_1_7"];
+    if(c&&c.ci95){
+      const pct=Math.abs(c.diff/c.mae_comp*100).toFixed(0);
+      $("#trusthead").innerHTML=`This forecast has been <b>${pct}% more accurate</b> than Foreca`;
+    }
+    const t=d.hourly_t2m||{},leads=[1,3,5,7];
+    const srcs=Object.keys(t).sort((a,b)=>(t[a]["3"]?.mae??99)-(t[b]["3"]?.mae??99));
+    const best={};leads.forEach(l=>best[l]=Math.min(...srcs.map(s=>t[s][l]?.mae??99)));
+    const rows=srcs.map(s=>`<tr class="${s==="blend_mean"?"us":""}"><td>${NICE[s]||s}</td>`+
+      leads.map(l=>{const x=t[s][l];
+        return `<td class="${x&&Math.abs(x.mae-best[l])<1e-9?"b":""}">${x?x.mae.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
+    $("#trustbody").innerHTML=`<div id="away"></div><div class="cols">
+      <div><h4>What each model says right now</h4><div id="members"></div></div>
+      <div><h4>Average error, °C — lower is better</h4>
+        <table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Day ${l}</th>`).join("")}</tr></thead>
+        <tbody>${rows}</tbody></table></div></div>
+      <div class="fine">${c&&c.ci95?`Measured over ${c.days} days and ${c.n.toLocaleString()} matched hourly comparisons
+        at 14 Finnish weather stations, days 1–7 ahead (95% CI ${c.ci95[0]} to ${c.ci95[1]}, p=${c.p}).`:""}
+        <b>The honest part:</b> this is one Finnish summer at fourteen stations. It says nothing yet about winter, other
+        countries, or forecasts past day seven — beyond day eight the advantage over Foreca disappears.</div>`;
+    if(d.generated)$("#gen").textContent="Accuracy last verified "+new Date(d.generated*1000).toISOString().slice(0,10)+".";
+    members();away();
+  }catch(e){$("#trustbody").innerHTML=`<div class="load">Verification numbers unavailable right now.</div>`}
+}
+function members(){
+  const el=$("#members");if(!el||!CUR)return;
+  const d=CUR,hrs=d.hours.filter(h=>h.t2m);
+  let i=hrs.findIndex(h=>h.time.slice(0,13)>=localKey(d.utc_offset_seconds));if(i<0)i=0;
+  const ms=hrs[i].t2m.members,vals=Object.values(ms);
+  const lo=Math.min(...vals),hi=Math.max(...vals),sp=(hi-lo)||1;
+  el.innerHTML=Object.entries(ms).sort((a,b)=>b[1]-a[1]).map(([n,v])=>
+    `<div class="mrow"><div class="nm">${n}</div>
+     <div class="mbar"><div class="mpt" style="left:${((v-lo)/sp*100).toFixed(1)}%"></div></div>
+     <div class="vv">${v.toFixed(1)}°</div></div>`).join("");
+}
+function away(){
+  const el=$("#away");if(!el||!CUR)return;
+  const fin=CUR.lat>=59.5&&CUR.lat<=70.5&&CUR.lon>=19&&CUR.lon<=32;
+  el.innerHTML=fin?"":`<div class="away"><b>${$("#city").textContent} is outside the measured area.</b>
+    The blend works the same way everywhere, but its accuracy has only been verified in Finland — and here it uses
+    ${CUR.members.length} models instead of 6.</div>`;
+}
+
+const saved=JSON.parse(localStorage.getItem("ilma")||"null");
+saved?load(saved.lat,saved.lon,saved.name,saved.sub):load(60.17523,24.94459,"Helsinki","Uusimaa, Finland");
+evidence();
+</script>
+</body>
+</html>

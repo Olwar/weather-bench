@@ -72,6 +72,65 @@ never merge):
 local days), the pairwise inference table described above, and a quantization
 sensitivity board (all sources rounded to integers).
 
+### 3. Derived blends (`blend.py`) - exploratory, added 2026-08-19
+
+No single source wins everywhere: FMI's human forecasters own leads 0-2, AIFS
+owns 3-7. `blend.py` writes combinations back into `forecasts` as ordinary
+sources, so they are judged by the same boards, on matched samples, with no
+special handling:
+
+- **blend_mean** - unweighted mean of every member available for that exact
+  (city, run_time, target_time, var). Zero fitted parameters, so it cannot
+  overfit. Members thin with lead (metno ~day 2, fmi_edited ~day 10, foreca
+  ~day 11), so a long-lead blend is an average of whoever still publishes.
+- **blend_ai** - mean of AIFS deterministic + AIFS ensemble mean; a fixed
+  subset chosen a priori, also unfitted.
+- **blend_learned** - inverse-MAE weights per (var, lead day), refit
+  continuously and trained ONLY on target dates strictly earlier than the
+  issuing run's own date, so a forecast can never learn from its own
+  verification. Falls back to equal weights until 7 training days exist.
+
+These were conceived **after** seeing the data. They are therefore tested as a
+**separate Holm family** in `score.py`, never merged with the pre-registered
+one - folding them in would inflate m and retroactively weaken the
+pre-registered secondary cells. Their competitor set includes
+`ecmwf_aifs025_single`, because "beats Foreca" is a far weaker claim than
+"beats the best single model".
+
+Re-run `blend.py` after each collect; it rebuilds every `blend_*` row and is
+idempotent.
+
+## Deployment (moved off the laptop 2026-08-19)
+
+Collection, scoring and the public site all run on `root@89.167.5.149` (Ubuntu
+24.04, Hetzner Helsinki). The laptop's launchd agent is disabled - its plist is
+renamed `.disabled` - so exactly one collector writes to exactly one database.
+
+    /opt/weather-bench/          code + venv
+    /opt/weather-bench/data/     bench.sqlite (~2.5 GB) + gzipped daily backups
+    /opt/weather-bench/web/      app.py (FastAPI) + static/index.html
+
+    weather-bench-web.service      uvicorn on 127.0.0.1:8200, always restarted
+    weather-bench-collect.timer    every 5h  -> collect.py
+    weather-bench-score.timer      04:30 UTC -> blend.py && score.py
+
+nginx proxies :8080 -> :8200 and is deliberately NOT `default_server`: bare-IP
+:80 on that box already serves an unrelated site. A `weather.happypalette.app`
+block is in place and starts working as soon as an A record points at the host.
+
+That box runs several unrelated services, so every unit carries a `MemoryMax`.
+This matters: a full score run peaks at ~2.0 GB on a machine with ~2.5 GB free.
+**The cap is currently the binding constraint - as the record grows, score.py
+will be killed rather than allowed to swamp the host.** The fix is to stop
+`pairwise()` materialising one dict entry per matched sample; per-date
+aggregates are already provably sufficient (see `_block_bootstrap`).
+
+The public site serves the blend and the verification statistics. It does NOT
+serve Foreca's feed: scraping them to verify against is research use, but
+re-publishing their forecast inside a competing forecast product is not, so
+they appear only as an aggregate skill number. Outside Finland the page says
+so, because the benchmark has only ever measured Finland.
+
 ## Fairness / methodology notes (state these with any published claim)
 
 - **Station vs city point**: Foreca's numbers are for their geocoded city point,

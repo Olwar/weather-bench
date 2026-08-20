@@ -1,0 +1,16 @@
+[Unit]
+Description=weather-bench web (forecast blend + verification stats)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/weather-bench
+Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
+Environment=PYTHONPATH=/opt/weather-bench
+ExecStart=/opt/weather-bench/.venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8200
+Restart=always
+RestartSec=5
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

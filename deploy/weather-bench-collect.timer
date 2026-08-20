@@ -1,0 +1,13 @@
+[Unit]
+Description=weather-bench collection every 5 hours
+
+[Timer]
+# 5h, not 6: the models issue on a 6-hourly cycle, so sampling at 6 would
+# phase-lock us to a fixed staleness in every model forever. 5 precesses
+# through every phase of the cycle within ~30h.
+OnBootSec=5min
+OnUnitActiveSec=5h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

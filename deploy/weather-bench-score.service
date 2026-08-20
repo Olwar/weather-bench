@@ -1,0 +1,10 @@
+[Unit]
+Description=weather-bench rebuild blends and rescore
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/weather-bench
+Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
+ExecStart=/bin/sh -c "/opt/weather-bench/.venv/bin/python /opt/weather-bench/blend.py && /opt/weather-bench/.venv/bin/python /opt/weather-bench/score.py > /opt/weather-bench/data/score_board.txt"
+MemoryMax=2G
+Nice=10
