@@ -199,7 +199,7 @@ def geocode(q: str = Query(min_length=2, max_length=80)):
         # space or any non-ASCII letter pasted raw into the upstream URL makes
         # urllib reject the request - "järvelä" and "new york" both 502'd.
         d = http_json("https://geocoding-api.open-meteo.com/v1/search"
-                      f"?name={urllib.parse.quote(q)}&count=8&language=en&format=json")
+                      f"?name={urllib.parse.quote(q)}&count=8&language=fi&format=json")
         return [{"name": r["name"], "country": r.get("country", ""),
                  "admin1": r.get("admin1", ""),
                  "lat": r["latitude"], "lon": r["longitude"]}

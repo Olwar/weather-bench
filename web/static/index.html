@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="fi">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ilma</title>
-<meta name="description" content="A weather app that averages six forecast models and shows you how much they agree.">
+<meta name="description" content="Sääennuste, joka yhdistää kuusi ennustemallia ja näyttää, kuinka yksimielisiä ne ovat.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&family=Karla:ital,wght@0,300..700;1,300..500&display=swap" rel="stylesheet">
@@ -193,7 +193,7 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
       <div class="brand">Ilma</div>
       <div class="finder">
         <span class="ic">◍</span>
-        <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Search any place…">
+        <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Hae mikä tahansa paikka…">
         <div class="res" id="res"></div>
       </div>
     </nav>
@@ -219,25 +219,25 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
 <div class="wrap">
 
 <section>
-  <div class="label">Next 7 days · the shaded band shows how much the six models disagree</div>
-  <div class="plot"><div class="tip" id="tip"></div><div id="chart" class="load">loading…</div></div>
+  <div class="label">Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä</div>
+  <div class="plot"><div class="tip" id="tip"></div><div id="chart" class="load">ladataan…</div></div>
 </section>
 
 <section>
-  <div class="label">Two weeks</div>
+  <div class="label">Kaksi viikkoa</div>
   <div class="week" id="days"></div>
 </section>
 
 <details class="trust" id="trust">
   <summary>
-    <span class="h" id="trusthead">Why trust this forecast?</span>
-    <span class="m">Verified against real weather stations · tap for the numbers <span class="chev">▾</span></span>
+    <span class="h" id="trusthead">Miksi luottaa tähän ennusteeseen?</span>
+    <span class="m">Todennettu oikeilla sääasemilla · avaa luvut <span class="chev">▾</span></span>
   </summary>
-  <div class="inner" id="trustbody"><div class="load">loading…</div></div>
+  <div class="inner" id="trustbody"><div class="load">ladataan…</div></div>
 </details>
 
 <footer>
-  <div>Ilma averages six forecast models — ECMWF AIFS &amp; its ensemble, ECMWF IFS, MET Nordic, FMI and Open-Meteo — and verifies the result against 14 Finnish weather stations. <span id="gen"></span></div>
+  <div>Ilma laskee keskiarvon kuudesta ennustemallista — ECMWF AIFS ja sen parvi, ECMWF IFS, MET Nordic, Ilmatieteen laitos ja Open-Meteo — ja todentaa tuloksen 14 suomalaisella sääasemalla. <span id="gen"></span></div>
 </footer>
 
 </div>
@@ -265,12 +265,12 @@ function cond(h){
   const rain=h.rain1h?h.rain1h.blend:0;
   const cc=h.cc?h.cc.blend:null;
   const day=h.isday?h.isday.blend>=.5:(+h.time.slice(11,13)>=7&&+h.time.slice(11,13)<21);
-  if(rain>=0.8)return{ic:ICO.rain,w:"Rain"};
-  if(rain>=0.1)return{ic:ICO.drizzle,w:"Light rain"};
-  if(cc==null)return{ic:day?ICO.sun:ICO.moon,w:day?"Clear":"Clear night"};
-  if(cc>=75)return{ic:ICO.cloud,w:"Overcast"};
-  if(cc>=35)return{ic:day?ICO.psun:ICO.pmoon,w:"Partly cloudy"};
-  return{ic:day?ICO.sun:ICO.moon,w:day?"Sunny":"Clear night"};
+  if(rain>=0.8)return{ic:ICO.rain,w:"Sadetta"};
+  if(rain>=0.1)return{ic:ICO.drizzle,w:"Heikkoa sadetta"};
+  if(cc==null)return{ic:day?ICO.sun:ICO.moon,w:day?"Selkeää":"Selkeä yö"};
+  if(cc>=75)return{ic:ICO.cloud,w:"Pilvistä"};
+  if(cc>=35)return{ic:day?ICO.psun:ICO.pmoon,w:"Puolipilvistä"};
+  return{ic:day?ICO.sun:ICO.moon,w:day?"Aurinkoista":"Selkeä yö"};
 }
 
 const SKIES=[
@@ -319,7 +319,7 @@ async function load(lat,lon,name,sub){
     const r=await fetch(`/api/forecast?lat=${lat}&lon=${lon}`);
     if(!r.ok)throw new Error("upstream "+r.status);
     CUR=await r.json();paint();
-  }catch(e){$("#chart").className="bad";$("#chart").textContent="Could not load this place: "+e.message}
+  }catch(e){$("#chart").className="bad";$("#chart").textContent="Paikan lataus epäonnistui: "+e.message}
 }
 const localKey=o=>new Date(Date.now()+o*1000).toISOString().slice(0,13);
 
@@ -334,19 +334,19 @@ function paint(){
   $("#deg").innerHTML=h.t2m.blend.toFixed(1)+"<sup>°</sup>";
   $("#side").innerHTML=
     `<div class="cond">${c0.ic}${c0.w}</div>`+
-    (h.ws?`Wind <b>${h.ws.blend.toFixed(1)} m/s</b><br>`:"")+
-    (h.rain1h!=null?`Rain <b>${h.rain1h.blend.toFixed(1)} mm/h</b><br>`:"")+
-    `Range <b>${h.t2m.lo.toFixed(0)}–${h.t2m.hi.toFixed(0)}°</b>`;
+    (h.ws?`Tuuli <b>${h.ws.blend.toFixed(1)} m/s</b><br>`:"")+
+    (h.rain1h!=null?`Sade <b>${h.rain1h.blend.toFixed(1)} mm/h</b><br>`:"")+
+    `Haarukka <b>${h.t2m.lo.toFixed(0)}–${h.t2m.hi.toFixed(0)}°</b>`;
 
   const w=h.t2m.hi-h.t2m.lo;
-  const verdict=w<1?"Models agree closely":w<2.2?"Models mostly agree":"Models disagree — less certain than usual";
+  const verdict=w<1?"Mallit hyvin yksimielisiä":w<2.2?"Mallit melko yksimielisiä":"Mallit eri mieltä — tavallista epävarmempaa";
   $("#verdict").innerHTML=`<span class="v">${verdict} · ±${(w/2).toFixed(1)}°</span>`;
 
   /* hourly strip: next 24h */
   $("#hours").innerHTML=hrs.slice(i,i+24).map((x,j)=>{
     const hh=x.time.slice(11,13),cx=cond(x);
     return `<div class="hr${j===0?" nowh":""}">
-      <div class="t">${j===0?"Now":hh}</div>
+      <div class="t">${j===0?"Nyt":hh}</div>
       <div class="ic">${cx.ic}</div>
       <div class="v">${x.t2m.blend.toFixed(0)}°</div>
       <div class="r">${x.rain1h&&x.rain1h.blend>=0.1?x.rain1h.blend.toFixed(1):""}</div></div>`;
@@ -372,7 +372,7 @@ function chart(hs){
   hs.forEach((h,i)=>{if(h.time.slice(11,13)==="00"&&i>2)
     mid+=`<line x1="${X(i)}" y1="${P.t-6}" x2="${X(i)}" y2="${H-P.b}" stroke="#C8BCA9" stroke-dasharray="1 5"/>
       <text x="${X(i)+8}" y="${H-P.b+20}" fill="#8A7D72" font-size="12" font-family="Karla">${
-        new Date(h.time+"Z").toLocaleDateString("en",{weekday:"short",timeZone:"UTC"})}</text>`});
+        new Date(h.time+"Z").toLocaleDateString("fi",{weekday:"short",timeZone:"UTC"})}</text>`});
   $("#chart").className="";
   $("#chart").innerHTML=`<svg viewBox="0 0 ${W} ${H}">
     <defs><linearGradient id="rib" x1="0" y1="0" x2="0" y2="1">
@@ -394,8 +394,8 @@ function chart(hs){
     cd.setAttribute("cx",X(i));cd.setAttribute("cy",Y(h.t2m.blend));cd.setAttribute("opacity","1");
     tip.classList.add("on");
     tip.innerHTML=`<span class="t">${h.t2m.blend.toFixed(1)}°</span>
-      <span class="s">${new Date(h.time+"Z").toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"})} ${h.time.slice(11,16)}
-      · range ${h.t2m.lo.toFixed(1)}–${h.t2m.hi.toFixed(1)}°</span>`;
+      <span class="s">${new Date(h.time+"Z").toLocaleDateString("fi",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"})} ${h.time.slice(11,16)}
+      · haarukka ${h.t2m.lo.toFixed(1)}–${h.t2m.hi.toFixed(1)}°</span>`;
     const px=X(i)/W*b.width;
     tip.style.left=Math.min(b.width-tip.offsetWidth,Math.max(0,px-tip.offsetWidth/2))+"px";
     tip.style.top="-10px";
@@ -413,7 +413,7 @@ function week(hs){
     const ic=r>=2?ICO.rain:r>=0.4?ICO.drizzle:cc==null?ICO.sun:cc>=75?ICO.cloud:cc>=35?ICO.psun:ICO.sun;
     const dt=new Date(d+"T00:00:00Z");
     return `<div class="d">
-      <div class="wd">${dt.toLocaleDateString("en",{weekday:"short",timeZone:"UTC"})}</div>
+      <div class="wd">${dt.toLocaleDateString("fi",{weekday:"short",timeZone:"UTC"})}</div>
       <div class="dm">${dt.getUTCDate()}.${dt.getUTCMonth()+1}.</div>
       <div class="ic">${ic}</div>
       <div class="mx">${Math.max(...t).toFixed(0)}°</div>
@@ -422,9 +422,9 @@ function week(hs){
 }
 
 /* trust strip */
-const NICE={blend_mean:"Ilma (this blend)",blend_learned:"Blend, weighted",blend_ai:"AI-only blend",
-  fmi_edited:"FMI forecasters",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
-  ecmwf_aifs_ens_mean:"AIFS ensemble",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
+const NICE={blend_mean:"Ilma (tämä yhdistelmä)",blend_learned:"Painotettu yhdistelmä",blend_ai:"Tekoälymallien yhdistelmä",
+  fmi_edited:"Ilmatieteen laitos",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
+  ecmwf_aifs_ens_mean:"AIFS-parvi",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
   metno_nordic:"MET Nordic"};
 
 async function evidence(){
@@ -435,38 +435,49 @@ async function evidence(){
     /* Claim only what the scoring run proves: a competitor is listed as beaten
        only when its pooled 1-7 cell is Holm-significant in the blend's favour. */
     const beat=[];
-    for(const [k,label] of [["foreca","Foreca"],["fmi_edited","FMI's forecasters"],
-                            ["ecmwf_aifs025_single","the best single model"]]){
+    for(const [k,label] of [["foreca","Foreca"],["fmi_edited","Ilmatieteen laitoksen meteorologit"],
+                            ["ecmwf_aifs025_single","paras yksittäinen malli"]]){
       const x=(P["blend_mean__vs__"+k]||{})["pooled_1_7"];
       if(x&&x.significant&&x.diff<0)
         beat.push({label,pct:Math.abs(x.diff/x.mae_comp*100).toFixed(0)});
     }
     if(beat.length===3){
-      $("#trusthead").innerHTML=`This forecast has been <b>more accurate than everything we test it against</b> — Foreca, FMI's forecasters, and every model inside it`;
+      $("#trusthead").innerHTML=`Tämä ennuste on ollut <b>tarkempi kuin kaikki, mihin sitä vertaamme</b> — Foreca, Ilmatieteen laitoksen meteorologit ja jokainen sen käyttämä malli`;
     }else if(beat.length){
-      $("#trusthead").innerHTML=`This forecast has been <b>more accurate</b> than ${beat.map(b=>b.label).join(" and ")}`;
+      $("#trusthead").innerHTML=`Tämä ennuste on ollut <b>tarkempi</b> kuin ${beat.map(b=>b.label).join(" ja ")}`;
     }
     window._BEAT=beat;
-    const t=d.hourly_t2m||{},leads=[1,3,5,7];
-    const srcs=Object.keys(t).sort((a,b)=>(t[a]["3"]?.mae??99)-(t[b]["3"]?.mae??99));
-    const best={};leads.forEach(l=>best[l]=Math.min(...srcs.map(s=>t[s][l]?.mae??99)));
-    const rows=srcs.map(s=>`<tr class="${s==="blend_mean"?"us":""}"><td>${NICE[s]||s}</td>`+
-      leads.map(l=>{const x=t[s][l];
-        return `<td class="${x&&Math.abs(x.mae-best[l])<1e-9?"b":""}">${x?x.mae.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
+    /* one builder for every board: key picks the metric, higher flips the
+       best-of-column test (MAE: lower wins; rain CSI: higher wins) */
+    const leads=[1,3,5,7];
+    const mkTbl=(data,key,higher)=>{
+      const srcs=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null))
+        .sort((a,b)=>{const av=data[a]["3"]?.[key]??(higher?-9:99),bv=data[b]["3"]?.[key]??(higher?-9:99);
+          return higher?bv-av:av-bv;});
+      const best={};leads.forEach(l=>{const vs=srcs.map(s=>data[s][l]?.[key]).filter(v=>v!=null);
+        best[l]=higher?Math.max(...vs):Math.min(...vs)});
+      const rows=srcs.map(s=>`<tr class="${s==="blend_mean"?"us":""}"><td>${NICE[s]||s}</td>`+
+        leads.map(l=>{const x=data[s][l]?.[key];
+          return `<td class="${x!=null&&Math.abs(x-best[l])<1e-9?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
+      return `<table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Päivä ${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+    };
     $("#trustbody").innerHTML=`<div id="away"></div><div class="cols">
-      <div><h4>What each model says right now</h4><div id="members"></div></div>
-      <div><h4>Average error, °C — lower is better</h4>
-        <table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>Day ${l}</th>`).join("")}</tr></thead>
-        <tbody>${rows}</tbody></table></div></div>
-      <div class="fine">${c&&c.ci95?`Measured over ${c.days} days and ${c.n.toLocaleString()} matched hourly comparisons
-        at 14 Finnish weather stations, days 1–7 ahead. Lower average error than
-        ${(window._BEAT||[]).map(b=>`${b.label} (−${b.pct}%)`).join(", ")} — each one
-        statistically significant after multiple-comparison correction.`:""}
-        <b>The honest part:</b> this is one Finnish summer at fourteen stations. It says nothing yet about winter, other
-        countries, or forecasts past day seven — beyond day eight the advantage over Foreca disappears.</div>`;
-    if(d.generated)$("#gen").textContent="Accuracy last verified "+new Date(d.generated*1000).toISOString().slice(0,10)+".";
+      <div><h4>Mitä kukin malli sanoo juuri nyt</h4><div id="members"></div></div>
+      <div><h4>Lämpötilan keskivirhe, °C — pienempi on parempi</h4>${mkTbl(d.hourly_t2m||{},"mae",false)}</div></div>
+      <div class="cols">
+        <div><h4>Tuulen keskivirhe, m/s — pienempi on parempi</h4>${mkTbl(d.hourly_ws||{},"mae",false)}</div>
+        <div><h4>Sateen osuvuus (CSI) — suurempi on parempi</h4>${mkTbl(d.rain_occurrence||{},"csi",true)}</div>
+      </div>
+      <div class="fine">${c&&c.ci95?`Mitattu ${c.days} päivän ja ${c.n.toLocaleString()} tunneittaisen vertailuparin yli
+        14 suomalaisella sääasemalla, 1–7 päivää eteenpäin. Pienempi keskivirhe kuin
+        ${(window._BEAT||[]).map(b=>`${b.label} (−${b.pct} %)`).join(", ")} — jokainen ero
+        on tilastollisesti merkitsevä monivertailukorjauksen jälkeen.`:""}
+        <b>Rehellisyyden nimissä:</b> tulokset ovat yhdeltä suomalaiselta kesältä neljältätoista asemalta.
+        Ne eivät vielä kerro mitään talvesta, muista maista tai yli seitsemän päivän ennusteista —
+        kahdeksannesta päivästä eteenpäin etu Forecaan katoaa.</div>`;
+    if(d.generated)$("#gen").textContent="Tarkkuus todennettu viimeksi "+new Date(d.generated*1000).toISOString().slice(0,10)+".";
     members();away();
-  }catch(e){$("#trustbody").innerHTML=`<div class="load">Verification numbers unavailable right now.</div>`}
+  }catch(e){$("#trustbody").innerHTML=`<div class="load">Todennusluvut eivät ole juuri nyt saatavilla.</div>`}
 }
 function members(){
   const el=$("#members");if(!el||!CUR)return;
@@ -482,13 +493,13 @@ function members(){
 function away(){
   const el=$("#away");if(!el||!CUR)return;
   const fin=CUR.lat>=59.5&&CUR.lat<=70.5&&CUR.lon>=19&&CUR.lon<=32;
-  el.innerHTML=fin?"":`<div class="away"><b>${$("#city").textContent} is outside the measured area.</b>
-    The blend works the same way everywhere, but its accuracy has only been verified in Finland — and here it uses
-    ${CUR.members.length} models instead of 6.</div>`;
+  el.innerHTML=fin?"":`<div class="away"><b>${$("#city").textContent} on mitatun alueen ulkopuolella.</b>
+    Yhdistelmä toimii samalla tavalla kaikkialla, mutta sen tarkkuus on todennettu vain Suomessa —
+    ja täällä se käyttää ${CUR.members.length} mallia kuuden sijaan.</div>`;
 }
 
 const saved=JSON.parse(localStorage.getItem("ilma")||"null");
-saved?load(saved.lat,saved.lon,saved.name,saved.sub):load(60.17523,24.94459,"Helsinki","Uusimaa, Finland");
+saved?load(saved.lat,saved.lon,saved.name,saved.sub):load(60.17523,24.94459,"Helsinki","Uusimaa, Suomi");
 evidence();
 </script>
 </body>
