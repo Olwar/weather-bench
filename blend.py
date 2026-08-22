@@ -51,7 +51,9 @@ AI_MEMBERS = ["ecmwf_aifs025_single", "ecmwf_aifs_ens_mean"]
 # blend_mean (Foreca included) for a product that excludes Foreca would be
 # claiming a different forecast's accuracy. Costs ~0.01 degC pooled 1-7.
 OPEN_MEMBERS = [m for m in MEMBERS if m != "foreca"]
-VARS = ("t2m", "ws", "rain1h")
+# wdir is deliberately absent: wind direction is circular, and a linear mean
+# of 350 deg and 10 deg says south. Direction is scored per source, never blended.
+VARS = ("t2m", "ws", "rain1h", "rh", "td", "gust", "pmsl", "cc", "snow")
 
 MIN_MEMBERS = 2      # below this it is not a blend, it is one source with a new name
 MIN_TRAIN_DAYS = 7   # distinct past target dates required before weights beat equal ones
@@ -187,6 +189,15 @@ def learned(con, weights) -> int:
 
 def main():
     con = get_db()
+    if "--wipe-only" in sys.argv:
+        # Blend rows are derived and rebuilt nightly; between scoring runs they
+        # are pure disk cost (~40% of DB growth), so the score service deletes
+        # them when it is done. The daily backup runs before the next rebuild
+        # and therefore stays blend-free and small.
+        wipe(con)
+        con.commit()
+        print("blend rows wiped", flush=True)
+        return
     print("rebuilding blends", flush=True)
     wipe(con)
     n1 = unweighted(con, "blend_mean", MEMBERS)

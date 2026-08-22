@@ -113,6 +113,56 @@ def hourly_board(con, var: str, quantize: bool = False) -> dict:
     return dict(out)
 
 
+def wind_direction_board(con) -> dict:
+    """Circular error, counted only when the observed wind is >= 2 m/s -
+    direction is meteorologically meaningless in near-calm, and including calm
+    hours would reward sources that merely guess the climatological direction."""
+    obs_dir = _load_obs(con, "wdir")
+    obs_ws = _load_obs(con, "ws")
+    cells: dict = {}
+    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='wdir'"
+    for source, city, run_time, target_time, value in con.execute(q):
+        truth = obs_dir.get((city, target_time))
+        ws = obs_ws.get((city, target_time))
+        if truth is None or ws is None or ws < 2.0:
+            continue
+        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
+        if lead_h < 0:
+            continue
+        d = abs(value - truth) % 360.0
+        _stat(cells, (source, int(lead_h // 24)), min(d, 360.0 - d))
+    out: dict = defaultdict(dict)
+    for (source, lead_d), st in _finish(cells).items():
+        out[source][str(lead_d)] = st
+    return dict(out)
+
+
+def cloud_class_board(con) -> dict:
+    """3-class hit rate: clear (<=2 octas, i.e. <=25%), overcast (>=7 octas,
+    >=87.5%), else partly. A ceilometer's octas and a model's grid-cell cloud
+    fraction are cousins rather than twins, so the class view is the fairer
+    headline than raw percent MAE (which is also reported)."""
+    obs = _load_obs(con, "cc")
+    cls = lambda v: 0 if v <= 25.0 else (2 if v >= 87.5 else 1)
+    cells: dict = defaultdict(lambda: {"hit": 0, "n": 0})
+    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='cc'"
+    for source, city, run_time, target_time, value in con.execute(q):
+        truth = obs.get((city, target_time))
+        if truth is None:
+            continue
+        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
+        if lead_h < 0:
+            continue
+        c = cells[(source, int(lead_h // 24))]
+        c["n"] += 1
+        c["hit"] += 1 if cls(value) == cls(truth) else 0
+    out: dict = defaultdict(dict)
+    for (source, lead_d), c in cells.items():
+        if c["n"] >= 100:
+            out[source][str(lead_d)] = {"n": c["n"], "acc": round(c["hit"] / c["n"], 3)}
+    return dict(out)
+
+
 def rain_occurrence_board(con) -> dict:
     obs = _load_obs(con, "rain1h")
     cells: dict = defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0})
@@ -359,7 +409,8 @@ def print_board(title, results, unit="degC MAE", higher_better=False):
         return
     keys = sorted({k for m in results.values() for k in m}, key=lambda k: (k.split("_d")[0], int(k.split("_d")[-1])) if "_d" in k else int(k))
     first = keys[0]
-    metric = "mae" if "mae" in next(iter(results.values())).get(first, {"mae": 0}) else "csi"
+    sample = next(iter(results.values())).get(first, {})
+    metric = next((k for k in ("mae", "csi", "acc") if k in sample), "mae")
     worst = -9e9 if higher_better else 9e9
     models = sorted(results, key=lambda m: results[m].get(first, {}).get(metric) or worst, reverse=higher_better)
     print(f"\n{title}  ({unit}; n in parens)")
@@ -406,6 +457,11 @@ def main():
     t2m_q = hourly_board(con, "t2m", quantize=True)
     ws = hourly_board(con, "ws")
     rain_occ = rain_occurrence_board(con)
+    # Extended exploratory boards (collection began 2026-08-22; they stay empty
+    # until forecast/observation overlap accrues, and hourly_board copes).
+    extended = {v: hourly_board(con, v) for v in ("rh", "td", "gust", "cc", "pmsl")}
+    wdir = wind_direction_board(con)
+    cloud_cls = cloud_class_board(con)
     obs_daily, fc_daily = daily_series(con)
     daily = daily_board(con, obs_daily, fc_daily)
     pairs = {
@@ -423,6 +479,12 @@ def main():
     print_board("Hourly t2m by lead day", t2m)
     print_board("Hourly t2m, ALL sources rounded to integers (quantization sensitivity)", t2m_q)
     print_board("Hourly wind speed by lead day", ws, unit="m/s MAE")
+    for v, unit in (("rh", "% MAE"), ("td", "degC MAE"), ("gust", "m/s MAE"),
+                    ("cc", "% cloud MAE"), ("pmsl", "hPa MAE")):
+        print_board(f"Hourly {v} by lead day", extended[v], unit=unit)
+    print_board("Wind direction (obs wind >= 2 m/s)", wdir, unit="deg MAE")
+    print_board("Cloud class hit rate (clear/partly/overcast)", cloud_cls,
+                unit="accuracy, higher better", higher_better=True)
     print_board("Rain occurrence (>=0.1mm/h) by lead day", rain_occ, unit="CSI, higher better", higher_better=True)
     print_board("Daily tmin/tmax/rain by lead day", daily, unit="degC / mm MAE")
     print_pairwise(pairs, "Pairwise inference: pre-registered family")
@@ -433,6 +495,8 @@ def main():
     (DATA_DIR / "prospective_results.json").write_text(json.dumps({
         "hourly_t2m": t2m, "hourly_t2m_quantized": t2m_q, "hourly_ws": ws,
         "rain_occurrence": rain_occ, "daily": daily,
+        **{f"hourly_{v}": extended[v] for v in extended},
+        "wind_direction": wdir, "cloud_classes": cloud_cls,
         "pairwise_t2m": {f"{a}__vs__{b}": v for (a, b), v in pairs.items()},
         "pairwise_t2m_blends_exploratory": {
             f"{a}__vs__{b}": v for (a, b), v in blend_pairs.items()},

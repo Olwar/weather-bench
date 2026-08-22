@@ -151,8 +151,18 @@ def store_observations(con: sqlite3.Connection, city: str, rows: list[tuple[str,
     )
 
 
-# FMI observation parameter -> our canonical var name
-OBS_PARAMS = {"t2m": "t2m", "ws_10min": "ws", "r_1h": "rain1h"}
+# FMI observation parameter -> our canonical var name.
+# Extended 2026-08-22 (exploratory endpoints; the pre-registered t2m primary is
+# untouched): humidity, dew point, gusts, direction, sea-level pressure, cloud
+# amount and snow depth. Availability varies by station - a missing parameter
+# simply yields no rows there, and scoring only counts matched pairs.
+OBS_PARAMS = {
+    "t2m": "t2m", "ws_10min": "ws", "r_1h": "rain1h",
+    "rh": "rh", "td": "td", "wg_10min": "gust", "wd_10min": "wdir",
+    "p_sea": "pmsl",
+    "n_man": "cc",      # cloud amount in octas 0-8; converted to % below
+    "snow_aws": "snow", # cm; FMI encodes "no snow" as -1
+}
 
 
 def fetch_obs(city: dict, start_utc: str, end_utc: str) -> list[tuple[str, str, float]]:
@@ -163,4 +173,17 @@ def fetch_obs(city: dict, start_utc: str, end_utc: str) -> list[tuple[str, str, 
         place=city["fmi_place"], parameters=",".join(OBS_PARAMS), timestep=60,
         starttime=start_utc, endtime=end_utc,
     )
-    return [(t, OBS_PARAMS[p], v) for (t, p, v) in rows if p in OBS_PARAMS]
+    out = []
+    for (t, p, v) in rows:
+        var = OBS_PARAMS.get(p)
+        if var is None:
+            continue
+        # Unit normalization at the door, so the DB speaks one language per var:
+        # cloud in percent (models publish %), snow depth with -1 meaning bare
+        # ground mapped to 0 so summer scores aren't poisoned by a sentinel.
+        if var == "cc":
+            v = v * 12.5
+        elif var == "snow" and v < 0:
+            v = 0.0
+        out.append((t, var, v))
+    return out

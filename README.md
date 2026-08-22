@@ -131,6 +131,32 @@ re-publishing their forecast inside a competing forecast product is not, so
 they appear only as an aggregate skill number. Outside Finland the page says
 so, because the benchmark has only ever measured Finland.
 
+## Extended variables (added 2026-08-22, exploratory)
+
+Collection and scoring now also cover humidity, dew point, wind gusts, wind
+direction, sea-level pressure, total cloud cover and snow depth - from the
+Open-Meteo models, the AIFS ensemble mean (where its endpoint publishes the
+field) and FMI's edited forecast, verified against the same 14 stations
+(availability varies: rh/td at all 14, cloud/pressure at 12, gust/direction
+at 11, snow at 10; scoring counts matched pairs only). These are
+**exploratory endpoints with history starting 2026-08-22** - the
+pre-registered t2m primary is untouched. Method notes:
+
+- **Wind direction** is scored with circular error, only on hours with
+  observed wind >= 2 m/s (direction in near-calm is noise), and is **never
+  blended** - a linear mean of 350 and 10 degrees says south.
+- **Cloud cover** truth is a ceilometer's octas (stored as %); a model's
+  grid-cell cloud fraction is a cousin, not a twin. Reported both as % MAE
+  and as 3-class hit rate (clear <=2/8, overcast >=7/8, else partly), the
+  class view being the fairer headline.
+- **Snow depth** accrues now so winter scoring has a record; FMI's "no snow"
+  sentinel (-1) is stored as 0, Open-Meteo's meters are converted to cm.
+- The dead-feed alarm stays scoped to t2m/ws/rain1h: models that lack an
+  extended field must not take down collection of everything else.
+- Blend rows are now **transient**: the nightly score service rebuilds them,
+  scores, then deletes them (`blend.py --wipe-only`). They are derived data;
+  keeping ~7M of them all day inflated DB growth and backups ~40%.
+
 ## Fairness / methodology notes (state these with any published claim)
 
 - **Station vs city point**: Foreca's numbers are for their geocoded city point,

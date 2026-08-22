@@ -30,9 +30,23 @@ from common import (
 
 HKI = ZoneInfo("Europe/Helsinki")
 # FMI edited-forecast parameter -> canonical var
-FMI_FC_PARAMS = {"temperature": "t2m", "windspeedms": "ws", "precipitation1h": "rain1h"}
+FMI_FC_PARAMS = {"temperature": "t2m", "windspeedms": "ws", "precipitation1h": "rain1h",
+                 "humidity": "rh", "dewpoint": "td", "totalcloudcover": "cc",
+                 "windgust": "gust", "pressure": "pmsl", "winddirection": "wdir"}
 # Open-Meteo hourly variable -> canonical var
-OM_VARS = {"temperature_2m": "t2m", "wind_speed_10m": "ws", "precipitation": "rain1h"}
+OM_VARS = {"temperature_2m": "t2m", "wind_speed_10m": "ws", "precipitation": "rain1h",
+           "relative_humidity_2m": "rh", "dew_point_2m": "td", "cloud_cover": "cc",
+           "wind_gusts_10m": "gust", "wind_direction_10m": "wdir",
+           "pressure_msl": "pmsl", "snow_depth": "snow"}
+# Open-Meteo snow_depth is meters, station snow_aws is cm.
+OM_SCALE = {"snow": 100.0}
+# The all-feeds-dead alarm stays scoped to the original variables: not every
+# model publishes every extended field, and a model that lacks cloud cover must
+# not take down collection of everything else.
+CORE_VARS = {"t2m", "ws", "rain1h"}
+# The ensemble endpoint supports fewer fields (its gusts come back null).
+ENS_VARS = {k: v for k, v in OM_VARS.items()
+            if v in ("t2m", "ws", "rain1h", "rh", "td", "cc", "pmsl")}
 # ECMWF AIFS ensemble (separate Open-Meteo endpoint; 51 members incl. control).
 # We store the ensemble MEAN - averaging cancels unpredictable detail, so the mean
 # normally beats any single deterministic run on MAE. This is the strongest freely
@@ -160,8 +174,9 @@ def collect_open_meteo(con, run_time):
                     var = OM_VARS.get(stem)
                     if model is None or var is None:
                         continue
+                    k = OM_SCALE.get(var, 1.0)
                     rows = [
-                        (model, city["key"], run_time, t, var, v)
+                        (model, city["key"], run_time, t, var, v * k)
                         for t, v in zip(times, values) if v is not None
                     ]
                     con.executemany(
@@ -172,7 +187,7 @@ def collect_open_meteo(con, run_time):
                     n += len(rows)
             # A single dead model/var must not be masked by the healthy ones
             # (that is exactly how the GraphCast feed died).
-            dead = [f"{m}/{v}" for (m, v), c in per_mv.items() if c == 0]
+            dead = [f"{m}/{v}" for (m, v), c in per_mv.items() if c == 0 and v in CORE_VARS]
             if dead:
                 raise RuntimeError(f"empty model/var feeds: {', '.join(dead)}")
             log(con, run_time, "open_meteo", city["key"], n)
@@ -194,7 +209,7 @@ def collect_aifs_ensemble(con, run_time):
             data = http_json(
                 "https://ensemble-api.open-meteo.com/v1/ensemble"
                 f"?latitude={city['lat']}&longitude={city['lon']}"
-                f"&hourly={','.join(OM_VARS)}&wind_speed_unit=ms"
+                f"&hourly={','.join(ENS_VARS)}&wind_speed_unit=ms"
                 f"&models={AIFS_ENS_MODEL}&forecast_days=16"
             )
             blocks = data if isinstance(data, list) else [data]
@@ -202,7 +217,7 @@ def collect_aifs_ensemble(con, run_time):
             for block in blocks:
                 hourly = block.get("hourly", {})
                 times = [t + "Z" for t in hourly.get("time", [])]
-                for om_var, var in OM_VARS.items():
+                for om_var, var in ENS_VARS.items():
                     # control key is the bare name; members are <name>_memberNN
                     series = [
                         vals for key, vals in hourly.items()
