@@ -1,0 +1,10 @@
+# Ship only the static site and config; the benchmark pipeline and its
+# gigabytes of sqlite stay on the Hetzner box. The bare * matches at EVERY
+# level, so web/static/** must be explicitly re-included or the html itself
+# gets stripped (it did).
+*
+!vercel.json
+!web
+web/*
+!web/static
+!web/static/**
