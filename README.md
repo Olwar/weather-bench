@@ -157,6 +157,33 @@ pre-registered t2m primary is untouched. Method notes:
   scores, then deletes them (`blend.py --wipe-only`). They are derived data;
   keeping ~7M of them all day inflated DB growth and backups ~40%.
 
+## International expansion (added 2026-08-26: SE, DK, DE, US)
+
+18 cities in four countries joined the benchmark. Verification truth outside
+Finland is the airport METAR station (aviationweather.gov / NOAA, public
+domain, global, no key); lat/lon in the registry are the AIRPORT coordinates
+so every forecast is requested at the exact observed point. National
+competitors, all licensed: **SMHI** (Sweden, open data - the new snow1g API;
+pmp3g was shut down 2026-03-31), **DWD** via Bright Sky (Germany, MOSMIX;
+units=si means Kelvin and Pascal), **NWS** (US, public domain; wind arrives
+as "12 km/h" strings and compass-point directions). Denmark has no national
+competitor yet - DMI's API needs a registered key - so Danish cities are
+scored against Yr, Google and the models.
+
+METAR caveats, disclosed: reports land at station minutes and are bucketed to
+the nearest hour (nearest report wins); temperatures are often whole degrees
+(coarser truth than FMI); pressure prefers true SLP and falls back to QNH
+except at Denver where elevation makes QNH wrong; an empty cloud list is
+ambiguous and yields no cloud row; hourly precipitation is not reliably
+reported outside the US, so rain verification abroad is thin.
+
+**Country segmentation**: verification only compares within one country.
+Every pre-existing board and the entire pre-registered inference family are
+pinned to the 14 Finnish cities - adding countries cannot move a Finnish
+number. Per-country boards live under "countries" in the results JSON, with
+history starting 2026-08-26. MET Nordic's dead-feed alarm is scoped to
+Nordic-coverage countries; its absence over Berlin is geography, not outage.
+
 ## Fairness / methodology notes (state these with any published claim)
 
 - **Station vs city point**: Foreca's numbers are for their geocoded city point,

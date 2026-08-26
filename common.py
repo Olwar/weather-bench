@@ -28,21 +28,47 @@ DB_PATH = DATA_DIR / "bench.sqlite"
 # lat/lon = the FMI observation station used for verification (all sources are
 # interpolated/requested at this exact point so everyone is judged on the same spot).
 CITIES = [
-    {"key": "helsinki",     "fmi_place": "helsinki",      "foreca_id": 100658225, "foreca_path": "Finland/Helsinki",      "lat": 60.17523, "lon": 24.94459},
-    {"key": "tampere",      "fmi_place": "tampere",       "foreca_id": 100634963, "foreca_path": "Finland/Tampere",       "lat": 61.51757, "lon": 23.75388},
-    {"key": "oulu",         "fmi_place": "oulu",          "foreca_id": 100643492, "foreca_path": "Finland/Oulu",          "lat": 64.99685, "lon": 25.52233},
-    {"key": "rovaniemi",    "fmi_place": "rovaniemi",     "foreca_id": 100638936, "foreca_path": "Finland/Rovaniemi",     "lat": 66.49832, "lon": 25.70880},
-    {"key": "turku",        "fmi_place": "turku",         "foreca_id": 100633679, "foreca_path": "Finland/Turku",         "lat": 60.45439, "lon": 22.17870},
-    {"key": "jyvaskyla",    "fmi_place": "jyvaskyla",     "foreca_id": 100655194, "foreca_path": "Finland/Jyvaskyla",     "lat": 62.39332, "lon": 25.68862},
-    {"key": "vaasa",        "fmi_place": "vaasa",         "foreca_id": 100632978, "foreca_path": "Finland/Vaasa",         "lat": 63.09871, "lon": 21.63938},
-    {"key": "kuopio",       "fmi_place": "kuopio",        "foreca_id": 100650224, "foreca_path": "Finland/Kuopio",        "lat": 62.89256, "lon": 27.63331},
-    {"key": "joensuu",      "fmi_place": "joensuu",       "foreca_id": 100655808, "foreca_path": "Finland/Joensuu",       "lat": 62.60179, "lon": 29.72713},
-    {"key": "lappeenranta", "fmi_place": "lappeenranta",  "foreca_id": 100648900, "foreca_path": "Finland/Lappeenranta",  "lat": 61.04030, "lon": 28.12916},
-    {"key": "pori",         "fmi_place": "pori",          "foreca_id": 100640999, "foreca_path": "Finland/Pori",          "lat": 61.46011, "lon": 21.80839},
-    {"key": "kajaani",      "fmi_place": "kajaani",       "foreca_id": 100654899, "foreca_path": "Finland/Kajaani",       "lat": 64.28290, "lon": 27.67114},
-    {"key": "sodankyla",    "fmi_place": "sodankylä",     "foreca_id": 100636464, "foreca_path": "Finland/Sodankyla",     "lat": 67.36663, "lon": 26.62901},
-    {"key": "mariehamn",    "fmi_place": "maarianhamina", "foreca_id": 103041732, "foreca_path": "Finland/Maarianhamina", "lat": 60.12735, "lon": 19.90038},
+    {"country": "fi", "key": "helsinki",     "fmi_place": "helsinki",      "foreca_id": 100658225, "foreca_path": "Finland/Helsinki",      "lat": 60.17523, "lon": 24.94459},
+    {"country": "fi", "key": "tampere",      "fmi_place": "tampere",       "foreca_id": 100634963, "foreca_path": "Finland/Tampere",       "lat": 61.51757, "lon": 23.75388},
+    {"country": "fi", "key": "oulu",         "fmi_place": "oulu",          "foreca_id": 100643492, "foreca_path": "Finland/Oulu",          "lat": 64.99685, "lon": 25.52233},
+    {"country": "fi", "key": "rovaniemi",    "fmi_place": "rovaniemi",     "foreca_id": 100638936, "foreca_path": "Finland/Rovaniemi",     "lat": 66.49832, "lon": 25.70880},
+    {"country": "fi", "key": "turku",        "fmi_place": "turku",         "foreca_id": 100633679, "foreca_path": "Finland/Turku",         "lat": 60.45439, "lon": 22.17870},
+    {"country": "fi", "key": "jyvaskyla",    "fmi_place": "jyvaskyla",     "foreca_id": 100655194, "foreca_path": "Finland/Jyvaskyla",     "lat": 62.39332, "lon": 25.68862},
+    {"country": "fi", "key": "vaasa",        "fmi_place": "vaasa",         "foreca_id": 100632978, "foreca_path": "Finland/Vaasa",         "lat": 63.09871, "lon": 21.63938},
+    {"country": "fi", "key": "kuopio",       "fmi_place": "kuopio",        "foreca_id": 100650224, "foreca_path": "Finland/Kuopio",        "lat": 62.89256, "lon": 27.63331},
+    {"country": "fi", "key": "joensuu",      "fmi_place": "joensuu",       "foreca_id": 100655808, "foreca_path": "Finland/Joensuu",       "lat": 62.60179, "lon": 29.72713},
+    {"country": "fi", "key": "lappeenranta", "fmi_place": "lappeenranta",  "foreca_id": 100648900, "foreca_path": "Finland/Lappeenranta",  "lat": 61.04030, "lon": 28.12916},
+    {"country": "fi", "key": "pori",         "fmi_place": "pori",          "foreca_id": 100640999, "foreca_path": "Finland/Pori",          "lat": 61.46011, "lon": 21.80839},
+    {"country": "fi", "key": "kajaani",      "fmi_place": "kajaani",       "foreca_id": 100654899, "foreca_path": "Finland/Kajaani",       "lat": 64.28290, "lon": 27.67114},
+    {"country": "fi", "key": "sodankyla",    "fmi_place": "sodankylä",     "foreca_id": 100636464, "foreca_path": "Finland/Sodankyla",     "lat": 67.36663, "lon": 26.62901},
+    {"country": "fi", "key": "mariehamn",    "fmi_place": "maarianhamina", "foreca_id": 103041732, "foreca_path": "Finland/Maarianhamina", "lat": 60.12735, "lon": 19.90038},
+    # ---- International cities (added 2026-08-26, stages 1+2) ----
+    # Verification truth is the airport METAR station ("metar" = ICAO id);
+    # lat/lon are the AIRPORT coordinates, so every forecast source is asked
+    # about the exact point the observations describe - same station-point
+    # discipline as the Finnish FMI stations. METAR temps are often whole
+    # degrees, a coarser truth than FMI; disclosed in the README.
+    {"country": "se", "key": "stockholm",  "metar": "ESSB", "lat": 59.3544, "lon": 17.9416},
+    {"country": "se", "key": "goteborg",   "metar": "ESGG", "lat": 57.6628, "lon": 12.2798},
+    {"country": "se", "key": "malmo",      "metar": "ESMS", "lat": 55.5300, "lon": 13.3762},
+    {"country": "se", "key": "lulea",      "metar": "ESPA", "lat": 65.5436, "lon": 22.1220},
+    {"country": "dk", "key": "kobenhavn",  "metar": "EKCH", "lat": 55.6180, "lon": 12.6560},
+    {"country": "dk", "key": "aarhus",     "metar": "EKAH", "lat": 56.3000, "lon": 10.6190},
+    {"country": "dk", "key": "aalborg",    "metar": "EKYT", "lat": 57.0928, "lon": 9.8492},
+    {"country": "de", "key": "berlin",     "metar": "EDDB", "lat": 52.3667, "lon": 13.5033},
+    {"country": "de", "key": "hamburg",    "metar": "EDDH", "lat": 53.6304, "lon": 9.9882},
+    {"country": "de", "key": "munchen",    "metar": "EDDM", "lat": 48.3538, "lon": 11.7861},
+    {"country": "de", "key": "frankfurt",  "metar": "EDDF", "lat": 50.0379, "lon": 8.5622},
+    {"country": "de", "key": "koln",       "metar": "EDDK", "lat": 50.8659, "lon": 7.1427},
+    {"country": "us", "key": "newyork",    "metar": "KLGA", "lat": 40.7772, "lon": -73.8726},
+    {"country": "us", "key": "chicago",    "metar": "KMDW", "lat": 41.7868, "lon": -87.7522},
+    {"country": "us", "key": "houston",    "metar": "KHOU", "lat": 29.6454, "lon": -95.2789},
+    {"country": "us", "key": "denver",     "metar": "KDEN", "lat": 39.8617, "lon": -104.6731},
+    {"country": "us", "key": "seattle",    "metar": "KSEA", "lat": 47.4502, "lon": -122.3088},
+    {"country": "us", "key": "miami",      "metar": "KMIA", "lat": 25.7959, "lon": -80.2870},
 ]
+
+CITY_COUNTRY = {c["key"]: c["country"] for c in CITIES}
 
 # Open-Meteo model ids benchmarked prospectively and retrospectively.
 # gfs_graphcast025 was tried and dropped 2026-07-23: Open-Meteo returns all-null
@@ -72,8 +98,8 @@ def http_get(url: str, tries: int = 3, sleep: float = 2.0) -> str:
     raise RuntimeError(f"GET failed after {tries} tries: {url}") from last
 
 
-def http_json(url: str) -> dict:
-    return json.loads(http_get(url))
+def http_json(url: str, tries: int = 3, sleep: float = 2.0) -> dict:
+    return json.loads(http_get(url, tries=tries, sleep=sleep))
 
 
 def fmi_simple(storedquery: str, expect_pos=None, **params) -> list[tuple[str, str, float]]:

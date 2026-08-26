@@ -48,6 +48,9 @@ CORE_VARS = {"t2m", "ws", "rain1h"}
 # The ensemble endpoint supports fewer fields (its gusts come back null).
 ENS_VARS = {k: v for k, v in OM_VARS.items()
             if v in ("t2m", "ws", "rain1h", "rh", "td", "cc", "pmsl")}
+# MET Nordic is a Nordic-only dataset; an empty feed there is geography, not
+# an outage, and must not fail collection for Berlin or Houston.
+METNO_COUNTRIES = {"fi", "se", "dk", "no"}
 # ECMWF AIFS ensemble (separate Open-Meteo endpoint; 51 members incl. control).
 # We store the ensemble MEAN - averaging cancels unpredictable detail, so the mean
 # normally beats any single deterministic run on MAE. This is the strongest freely
@@ -67,6 +70,8 @@ def log(con, run_time, source, city, rows, error=None):
 
 def collect_foreca(con, run_time):
     for city in CITIES:
+        if city.get("country") != "fi":
+            continue
         try:
             data = http_json(f"https://api.foreca.net/data/daily/{city['foreca_id']}.json")
             rows = []
@@ -95,6 +100,8 @@ def collect_foreca_hourly(con, run_time):
     t = temperature degC, ws = wind m/s, p = precipitation mm/h.
     """
     for city in CITIES:
+        if city.get("country") != "fi":
+            continue
         try:
             html = http_get(f"https://www.foreca.fi/{city['foreca_path']}/details")
             m = re.search(r"var hour_data = (\{.*?\});", html, re.S)
@@ -128,6 +135,8 @@ def collect_fmi_edited(con, run_time):
     start = now.strftime("%Y-%m-%dT%H:00:00Z")
     end = (now + timedelta(days=10)).strftime("%Y-%m-%dT%H:00:00Z")
     for city in CITIES:
+        if city.get("country") != "fi":
+            continue
         try:
             rows = fmi_simple(
                 "fmi::forecast::edited::weather::scandinavia::point::simple",
@@ -188,7 +197,9 @@ def collect_open_meteo(con, run_time):
                     n += len(rows)
             # A single dead model/var must not be masked by the healthy ones
             # (that is exactly how the GraphCast feed died).
-            dead = [f"{m}/{v}" for (m, v), c in per_mv.items() if c == 0 and v in CORE_VARS]
+            dead = [f"{m}/{v}" for (m, v), c in per_mv.items()
+                    if c == 0 and v in CORE_VARS
+                    and not (m == "metno_nordic" and city.get("country") not in METNO_COUNTRIES)]
             if dead:
                 raise RuntimeError(f"empty model/var feeds: {', '.join(dead)}")
             log(con, run_time, "open_meteo", city["key"], n)
@@ -334,11 +345,14 @@ def collect_aifs_ensemble(con, run_time):
     """
     for city in CITIES:
         try:
+            # patient retry: the ensemble endpoint is credit-heavy and its
+            # minutely cap resets within a minute - a 20 s backoff outlives it
             data = http_json(
                 "https://ensemble-api.open-meteo.com/v1/ensemble"
                 f"?latitude={city['lat']}&longitude={city['lon']}"
                 f"&hourly={','.join(ENS_VARS)}&wind_speed_unit=ms"
-                f"&models={AIFS_ENS_MODEL}&forecast_days=16"
+                f"&models={AIFS_ENS_MODEL}&forecast_days=16",
+                tries=4, sleep=20,
             )
             blocks = data if isinstance(data, list) else [data]
             n = 0
@@ -367,9 +381,234 @@ def collect_aifs_ensemble(con, run_time):
             if n == 0:
                 raise RuntimeError(f"0 rows parsed (error or key change: {str(data)[:150]})")
             log(con, run_time, AIFS_ENS_SOURCE, city["key"], n)
+            time.sleep(1.5)  # ensemble calls are credit-heavy; 32 cities tripped the minutely cap
         except Exception as e:  # noqa: BLE001
             log(con, run_time, AIFS_ENS_SOURCE, city["key"], 0, str(e))
         time.sleep(0.4)
+    con.commit()
+
+
+METAR_OCTAS = {"CLR": 0, "SKC": 0, "CAVOK": 0, "NCD": 0, "NSC": 0,
+               "FEW": 2, "SCT": 4, "BKN": 6, "OVC": 8, "VV": 8}
+COMPASS = {d: i * 22.5 for i, d in enumerate(
+    ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"])}
+
+
+def _rh_from_t_td(t, td):
+    """Magnus formula; METAR gives T and Td but not RH."""
+    import math
+    return 100.0 * math.exp(17.625 * td / (243.04 + td)) / math.exp(17.625 * t / (243.04 + t))
+
+
+def collect_metar_obs(con, run_time):
+    """Observation truth for every non-Finnish city: airport METARs via
+    aviationweather.gov (NOAA, public domain, no key, global). One call for all
+    stations, 72 h back so QC'd/late reports self-heal like the FMI window.
+
+    METARs land at station-specific minutes (:20, :50...), our grid is
+    top-of-hour: each report is bucketed to its nearest hour and the report
+    closest to the hour wins. Pressure prefers true SLP, falls back to QNH
+    (equal to SLP to within ~1 hPa at these low-elevation airports; KDEN is
+    the exception, where the fallback is skipped). An empty cloud list is
+    ambiguous (clear vs not reported) and yields no cloud row.
+    """
+    metar_cities = {c["metar"]: c["key"] for c in CITIES if c.get("metar")}
+    if not metar_cities:
+        return
+    try:
+        data = http_json(
+            "https://aviationweather.gov/api/data/metar"
+            f"?ids={','.join(metar_cities)}&format=json&hours=72"
+        )
+        # (city, hour, var) -> (seconds_from_hour, value); nearest report wins
+        best = {}
+        for m in data:
+            city = metar_cities.get(m.get("icaoId"))
+            t = m.get("reportTime")
+            if not city or not t:
+                continue
+            dt = datetime.strptime(t[:19], "%Y-%m-%dT%H:%M:%S")
+            hour = (dt + timedelta(minutes=30)).replace(minute=0, second=0)
+            dist = abs((dt - hour).total_seconds())
+            hh = hour.strftime("%Y-%m-%dT%H:%MZ")
+            temp, dewp = m.get("temp"), m.get("dewp")
+            vals = {"t2m": temp, "td": dewp}
+            if temp is not None and dewp is not None:
+                vals["rh"] = round(_rh_from_t_td(float(temp), float(dewp)), 1)
+            if isinstance(m.get("wdir"), (int, float)):
+                vals["wdir"] = float(m["wdir"])
+            if m.get("wspd") is not None:
+                vals["ws"] = float(m["wspd"]) * 0.514444
+            if m.get("wgst") is not None:
+                vals["gust"] = float(m["wgst"]) * 0.514444
+            if m.get("slp") is not None:
+                vals["pmsl"] = float(m["slp"])
+            elif m.get("altim") is not None and city != "denver":
+                vals["pmsl"] = float(m["altim"])
+            covers = [METAR_OCTAS.get(c.get("cover")) for c in (m.get("clouds") or [])]
+            covers = [c for c in covers if c is not None]
+            if covers:
+                vals["cc"] = max(covers) * 12.5
+            for var, v in vals.items():
+                if v is None:
+                    continue
+                k = (city, hh, var)
+                if k not in best or dist < best[k][0]:
+                    best[k] = (dist, float(v))
+        by_city = {}
+        for (city, hh, var), (_, v) in best.items():
+            by_city.setdefault(city, []).append((hh, var, v))
+        for city, rows in by_city.items():
+            store_observations(con, city, rows)
+            log(con, run_time, "metar_obs", city, len(rows))
+        missing = set(metar_cities.values()) - set(by_city)
+        for city in missing:
+            log(con, run_time, "metar_obs", city, 0, "no reports in window")
+    except Exception as e:  # noqa: BLE001
+        for city in metar_cities.values():
+            log(con, run_time, "metar_obs", city, 0, str(e))
+    con.commit()
+
+
+SMHI_MAP = {"air_temperature": "t2m", "wind_speed": "ws", "wind_from_direction": "wdir",
+            "wind_speed_of_gust": "gust", "relative_humidity": "rh",
+            "air_pressure_at_mean_sea_level": "pmsl", "cloud_area_fraction": "cc"}
+
+
+def collect_smhi(con, run_time):
+    """Sweden's national forecast (SMHI open data, snow1g - the API that
+    replaced pmp3g when it was shut down 2026-03-31). CC BY-class open data.
+    Precipitation is an interval amount [intervalParametersStartTime, time];
+    only 1 h intervals are stored, stamped hour-ending at `time`."""
+    for city in CITIES:
+        if city.get("country") != "se":
+            continue
+        try:
+            data = http_json(
+                "https://opendata-download-metfcst.smhi.se/api/category/snow1g/"
+                f"version/1/geotype/point/lon/{round(city['lon'],2)}/lat/{round(city['lat'],2)}/data.json"
+            )
+            rows = []
+            for step in data["timeSeries"]:
+                t = step["time"][:16] + "Z"
+                d = step.get("data", {})
+                for k, var in SMHI_MAP.items():
+                    if d.get(k) is not None:
+                        rows.append(("smhi", city["key"], run_time, t, var, float(d[k])))
+                start = step.get("intervalParametersStartTime")
+                p1 = d.get("precipitation_amount_mean")
+                if p1 is not None and start:
+                    span = (datetime.strptime(step["time"][:16], "%Y-%m-%dT%H:%M")
+                            - datetime.strptime(start[:16], "%Y-%m-%dT%H:%M")).total_seconds()
+                    if span == 3600:
+                        rows.append(("smhi", city["key"], run_time, t, "rain1h", float(p1)))
+            if not rows:
+                raise RuntimeError("0 rows parsed")
+            con.executemany(
+                "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+            log(con, run_time, "smhi", city["key"], len(rows))
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, "smhi", city["key"], 0, str(e))
+        time.sleep(0.3)
+    con.commit()
+
+
+BSKY_MAP = {"wind_speed": "ws", "wind_direction": "wdir", "wind_gust_speed": "gust",
+            "relative_humidity": "rh", "cloud_cover": "cc"}
+
+
+def collect_brightsky(con, run_time):
+    """Germany's national forecast (DWD MOSMIX) via Bright Sky - the public
+    no-key JSON front for DWD open data. units=si means KELVIN and PASCAL
+    (learned the hard way: 297.85 K, 102010 Pa), converted at the door.
+    Bright Sky's precipitation is the hour PRECEDING the timestamp - already
+    our hour-ending convention."""
+    end = (datetime.now(timezone.utc) + timedelta(days=10)).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for city in CITIES:
+        if city.get("country") != "de":
+            continue
+        try:
+            data = http_json(
+                f"https://api.brightsky.dev/weather?lat={city['lat']}&lon={city['lon']}"
+                f"&date={today}&last_date={end}&units=si"
+            )
+            rows = []
+            for h in data.get("weather", []):
+                ts = h["timestamp"]
+                t = (datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")
+                     - timedelta(hours=int(ts[19:22] or 0))).strftime("%Y-%m-%dT%H:%MZ")                     if len(ts) > 19 and ts[19] in "+-" else ts[:16] + "Z"
+                d = dict(h)
+                if d.get("temperature") is not None:
+                    rows.append(("dwd", city["key"], run_time, t, "t2m", d["temperature"] - 273.15))
+                if d.get("dew_point") is not None:
+                    rows.append(("dwd", city["key"], run_time, t, "td", d["dew_point"] - 273.15))
+                if d.get("pressure_msl") is not None:
+                    rows.append(("dwd", city["key"], run_time, t, "pmsl", d["pressure_msl"] / 100.0))
+                if d.get("precipitation") is not None:
+                    rows.append(("dwd", city["key"], run_time, t, "rain1h", float(d["precipitation"])))
+                for k, var in BSKY_MAP.items():
+                    if d.get(k) is not None:
+                        rows.append(("dwd", city["key"], run_time, t, var, float(d[k])))
+            if not rows:
+                raise RuntimeError("0 rows parsed")
+            con.executemany(
+                "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+            log(con, run_time, "dwd", city["key"], len(rows))
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, "dwd", city["key"], 0, str(e))
+        time.sleep(0.3)
+    con.commit()
+
+
+def collect_nws(con, run_time):
+    """The US national forecast (api.weather.gov, public domain, no key).
+    Two hops: points/{lat,lon} names the gridpoint, whose hourly forecast is
+    then fetched with units=si. Wind arrives as the string "12 km/h" and the
+    direction as a compass point - both parsed. ~6.5 days of hours."""
+    for city in CITIES:
+        if city.get("country") != "us":
+            continue
+        try:
+            pt = http_json(f"https://api.weather.gov/points/{city['lat']},{city['lon']}")
+            url = pt["properties"]["forecastHourly"] + "?units=si"
+            data = http_json(url)
+            rows = []
+            for per in data["properties"]["periods"]:
+                ts = per["startTime"]
+                # "2026-08-26T12:00:00-05:00": UTC = local minus the signed offset
+                sign = -1 if ts[19] == "-" else 1
+                off = sign * (int(ts[20:22]) * 60 + int(ts[23:25]))
+                t = (datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")
+                     - timedelta(minutes=off)).strftime("%Y-%m-%dT%H:%MZ")
+                if per.get("temperature") is not None and per.get("temperatureUnit") == "C":
+                    rows.append(("nws", city["key"], run_time, t, "t2m", float(per["temperature"])))
+                wsp = per.get("windSpeed") or ""
+                if wsp.endswith("km/h"):
+                    rows.append(("nws", city["key"], run_time, t, "ws", float(wsp.split()[0]) / 3.6))
+                wd = COMPASS.get(per.get("windDirection") or "")
+                if wd is not None:
+                    rows.append(("nws", city["key"], run_time, t, "wdir", wd))
+                rh = (per.get("relativeHumidity") or {}).get("value")
+                if rh is not None:
+                    rows.append(("nws", city["key"], run_time, t, "rh", float(rh)))
+                dp = (per.get("dewpoint") or {}).get("value")
+                if dp is not None:
+                    rows.append(("nws", city["key"], run_time, t, "td", float(dp)))
+            if not rows:
+                raise RuntimeError("0 rows parsed")
+            con.executemany(
+                "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+            log(con, run_time, "nws", city["key"], len(rows))
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, "nws", city["key"], 0, str(e))
+        time.sleep(0.5)
     con.commit()
 
 
@@ -380,6 +619,8 @@ def collect_obs(con, run_time):
     start = (now - timedelta(hours=166)).strftime("%Y-%m-%dT%H:00:00Z")
     end = now.strftime("%Y-%m-%dT%H:00:00Z")
     for city in CITIES:
+        if city.get("country") != "fi":
+            continue
         try:
             rows = fetch_obs(city, start, end)
             if not rows:
@@ -405,7 +646,11 @@ def main():
     collect_aifs_ensemble(con, run_time)
     collect_google(con, run_time)
     collect_yr(con, run_time)
+    collect_smhi(con, run_time)
+    collect_brightsky(con, run_time)
+    collect_nws(con, run_time)
     collect_obs(con, run_time)
+    collect_metar_obs(con, run_time)
     con.commit()
     errs = con.execute(
         "SELECT count(*) FROM collect_log WHERE run_time=? AND error IS NOT NULL", (run_time,)

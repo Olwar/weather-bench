@@ -29,7 +29,17 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from common import get_db, DATA_DIR
+from common import get_db, DATA_DIR, CITIES
+
+# Verification is only comparable within one country: same climate, same truth
+# network, same competitor coverage. Every pre-existing board and the entire
+# pre-registered inference family are pinned to the Finnish cities, so adding
+# countries can never move a Finnish number. New countries get their own
+# boards under "countries" in the JSON.
+FI_CITIES = frozenset(c["key"] for c in CITIES if c["country"] == "fi")
+COUNTRY_CITIES = {}
+for c in CITIES:
+    COUNTRY_CITIES.setdefault(c["country"], set()).add(c["key"])
 
 HKI = ZoneInfo("Europe/Helsinki")
 RAIN_THR = 0.1     # mm/h for occurrence skill
@@ -88,17 +98,18 @@ def _finish(cells):
     }
 
 
-def _load_obs(con, var):
+def _load_obs(con, var, cities=None):
     return {
         (c, t): v
         for c, t, v in con.execute("SELECT city, time, value FROM observations WHERE var=?", (var,))
+        if cities is None or c in cities
     }
 
 
-def hourly_board(con, var: str, quantize: bool = False) -> dict:
+def hourly_board(con, var: str, quantize: bool = False, cities=FI_CITIES) -> dict:
     """quantize=True rounds every forecast to whole units first - the sensitivity
     check for the 'Foreca only publishes integers' fairness objection."""
-    obs = _load_obs(con, var)
+    obs = _load_obs(con, var, cities)
     cells: dict = {}
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=?"
     for source, city, run_time, target_time, value in con.execute(q, (var,)):
@@ -117,12 +128,12 @@ def hourly_board(con, var: str, quantize: bool = False) -> dict:
     return dict(out)
 
 
-def wind_direction_board(con) -> dict:
+def wind_direction_board(con, cities=FI_CITIES) -> dict:
     """Circular error, counted only when the observed wind is >= 2 m/s -
     direction is meteorologically meaningless in near-calm, and including calm
     hours would reward sources that merely guess the climatological direction."""
-    obs_dir = _load_obs(con, "wdir")
-    obs_ws = _load_obs(con, "ws")
+    obs_dir = _load_obs(con, "wdir", cities)
+    obs_ws = _load_obs(con, "ws", cities)
     cells: dict = {}
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='wdir'"
     for source, city, run_time, target_time, value in con.execute(q):
@@ -141,12 +152,12 @@ def wind_direction_board(con) -> dict:
     return dict(out)
 
 
-def cloud_class_board(con) -> dict:
+def cloud_class_board(con, cities=FI_CITIES) -> dict:
     """3-class hit rate: clear (<=2 octas, i.e. <=25%), overcast (>=7 octas,
     >=87.5%), else partly. A ceilometer's octas and a model's grid-cell cloud
     fraction are cousins rather than twins, so the class view is the fairer
     headline than raw percent MAE (which is also reported)."""
-    obs = _load_obs(con, "cc")
+    obs = _load_obs(con, "cc", cities)
     cls = lambda v: 0 if v <= 25.0 else (2 if v >= 87.5 else 1)
     cells: dict = defaultdict(lambda: {"hit": 0, "n": 0})
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='cc'"
@@ -167,8 +178,8 @@ def cloud_class_board(con) -> dict:
     return dict(out)
 
 
-def rain_occurrence_board(con) -> dict:
-    obs = _load_obs(con, "rain1h")
+def rain_occurrence_board(con, cities=FI_CITIES) -> dict:
+    obs = _load_obs(con, "rain1h", cities)
     cells: dict = defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0})
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='rain1h'"
     for source, city, run_time, target_time, value in con.execute(q):
@@ -205,6 +216,8 @@ def daily_series(con):
     t_by_day: dict = defaultdict(list)
     r_by_day: dict = defaultdict(list)
     for c, t, var, v in con.execute("SELECT city, time, var, value FROM observations WHERE var IN ('t2m','rain1h')"):
+        if c not in FI_CITIES:
+            continue
         if var == "t2m":
             t_by_day[(c, _local_date(t))].append(v)
         else:
@@ -354,9 +367,9 @@ def _summarize_pairs(by_date: dict) -> dict:
     }
 
 
-def pairwise(con, cand: str, comp: str, var: str = "t2m") -> dict:
+def pairwise(con, cand: str, comp: str, var: str = "t2m", cities=FI_CITIES) -> dict:
     """Matched samples: same city, same snapshot, same target hour."""
-    obs = _load_obs(con, var)
+    obs = _load_obs(con, var, cities)
     errs: dict = defaultdict(dict)
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=? AND source IN (?,?)"
     for source, city, run_time, target_time, value in con.execute(q, (var, cand, comp)):
@@ -468,6 +481,15 @@ def main():
     cloud_cls = cloud_class_board(con)
     obs_daily, fc_daily = daily_series(con)
     daily = daily_board(con, obs_daily, fc_daily)
+    countries = {
+        cc: {
+            "hourly_t2m": hourly_board(con, "t2m", cities=cits),
+            "hourly_ws": hourly_board(con, "ws", cities=cits),
+            "hourly_cc": hourly_board(con, "cc", cities=cits),
+            "rain_occurrence": rain_occurrence_board(con, cities=cits),
+        }
+        for cc, cits in COUNTRY_CITIES.items() if cc != "fi"
+    }
     pairs = {
         (cand, comp): pairwise(con, cand, comp)
         for cand in CANDIDATES for comp in COMPETITORS
@@ -489,6 +511,8 @@ def main():
     print_board("Wind direction (obs wind >= 2 m/s)", wdir, unit="deg MAE")
     print_board("Cloud class hit rate (clear/partly/overcast)", cloud_cls,
                 unit="accuracy, higher better", higher_better=True)
+    for cc in sorted(k for k in COUNTRY_CITIES if k != "fi"):
+        print_board(f"[{cc}] hourly t2m", countries[cc]["hourly_t2m"])
     print_board("Rain occurrence (>=0.1mm/h) by lead day", rain_occ, unit="CSI, higher better", higher_better=True)
     print_board("Daily tmin/tmax/rain by lead day", daily, unit="degC / mm MAE")
     print_pairwise(pairs, "Pairwise inference: pre-registered family")
@@ -501,6 +525,7 @@ def main():
         "rain_occurrence": rain_occ, "daily": daily,
         **{f"hourly_{v}": extended[v] for v in extended},
         "wind_direction": wdir, "cloud_classes": cloud_cls,
+        "countries": countries,
         "pairwise_t2m": {f"{a}__vs__{b}": v for (a, b), v in pairs.items()},
         "pairwise_t2m_blends_exploratory": {
             f"{a}__vs__{b}": v for (a, b), v in blend_pairs.items()},
