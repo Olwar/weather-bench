@@ -54,7 +54,9 @@ OM_MODELS = [
     "best_match",           # Open-Meteo's auto blend - what a solo dev's app would ship
 ]
 
-UA = "weather-bench/0.1 (personal forecast verification research)"
+# api.met.no terms require an identifying User-Agent with a contact point;
+# the benchmark site doubles as that contact.
+UA = "weather-bench/0.1 (+http://89.167.5.149:8080; forecast verification research)"
 
 
 def http_get(url: str, tries: int = 3, sleep: float = 2.0) -> str:

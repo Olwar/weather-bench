@@ -51,6 +51,11 @@ AI_MEMBERS = ["ecmwf_aifs025_single", "ecmwf_aifs_ens_mean"]
 # blend_mean (Foreca included) for a product that excludes Foreca would be
 # claiming a different forecast's accuracy. Costs ~0.01 degC pooled 1-7.
 OPEN_MEMBERS = [m for m in MEMBERS if m != "foreca"]
+# Candidate upgrade to blend_open: yr is CC BY 4.0, so unlike Foreca or
+# Google it MAY legally be a member. Whether it should be is empirical -
+# it shares model DNA with metno_nordic, so the diversity gain is uncertain.
+# Scored side by side with blend_open; promote only if it wins.
+OPEN_YR_MEMBERS = OPEN_MEMBERS + ["yr"]
 # wdir is deliberately absent: wind direction is circular, and a linear mean
 # of 350 deg and 10 deg says south. Direction is scored per source, never blended.
 VARS = ("t2m", "ws", "rain1h", "rh", "td", "gust", "pmsl", "cc", "snow")
@@ -206,6 +211,8 @@ def main():
     print(f"  blend_ai      {n2:>9,} rows", flush=True)
     n4 = unweighted(con, "blend_open", OPEN_MEMBERS)
     print(f"  blend_open    {n4:>9,} rows", flush=True)
+    n5 = unweighted(con, "blend_open_yr", OPEN_YR_MEMBERS)
+    print(f"  blend_open_yr {n5:>9,} rows", flush=True)
     print("  training walk-forward weights...", flush=True)
     w = train_weights(con)
     n3 = learned(con, w)

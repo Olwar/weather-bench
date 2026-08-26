@@ -198,6 +198,55 @@ def collect_open_meteo(con, run_time):
     con.commit()
 
 
+# yr.no's published forecast = MET Norway Locationforecast 2.0 ("complete").
+# CC BY 4.0, commercial use allowed with attribution - the friendliest
+# competitor licence in the whole benchmark. Hourly to ~2.5 days, then
+# 6-hourly to ~10 days; instant values at sparse timesteps still score as
+# ordinary matched pairs, the boards just carry smaller n at long leads.
+YR_VARS = {
+    "air_temperature": "t2m", "wind_speed": "ws", "wind_from_direction": "wdir",
+    "wind_speed_of_gust": "gust", "relative_humidity": "rh",
+    "dew_point_temperature": "td", "cloud_area_fraction": "cc",
+    "air_pressure_at_sea_level": "pmsl",
+}
+
+
+def collect_yr(con, run_time):
+    for city in CITIES:
+        try:
+            data = http_json(
+                "https://api.met.no/weatherapi/locationforecast/2.0/complete"
+                f"?lat={city['lat']}&lon={city['lon']}"
+            )
+            rows = []
+            for step in data["properties"]["timeseries"]:
+                t = step["time"][:16] + "Z"
+                inst = step["data"].get("instant", {}).get("details", {})
+                for k, var in YR_VARS.items():
+                    v = inst.get(k)
+                    if v is not None:
+                        rows.append(("yr", city["key"], run_time, t, var, float(v)))
+                # next_1_hours covers [T, T+1h); our rain1h convention is
+                # hour-ending, so it lands on T+1h.
+                n1 = step["data"].get("next_1_hours", {}).get("details", {})
+                p1 = n1.get("precipitation_amount")
+                if p1 is not None:
+                    end = (datetime.strptime(t, "%Y-%m-%dT%H:%MZ")
+                           + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%MZ")
+                    rows.append(("yr", city["key"], run_time, end, "rain1h", float(p1)))
+            if not rows:
+                raise RuntimeError("0 rows parsed")
+            con.executemany(
+                "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+            log(con, run_time, "yr", city["key"], len(rows))
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, "yr", city["key"], 0, str(e))
+        time.sleep(0.5)
+    con.commit()
+
+
 GOOGLE_KEY_FILE = Path(__file__).parent / "google_api_key.txt"
 
 
@@ -355,6 +404,7 @@ def main():
     collect_open_meteo(con, run_time)
     collect_aifs_ensemble(con, run_time)
     collect_google(con, run_time)
+    collect_yr(con, run_time)
     collect_obs(con, run_time)
     con.commit()
     errs = con.execute(

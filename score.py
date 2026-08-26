@@ -52,8 +52,12 @@ PRIMARY = ("ecmwf_aifs025_single", "foreca", "pooled_1_7")
 # the data, and folding them in would inflate m and retroactively weaken the
 # pre-registered secondary cells. Their competitor set adds the best single
 # model, because "beats Foreca" is a much weaker claim than "beats AIFS".
-BLENDS = ["blend_mean", "blend_learned", "blend_ai", "blend_open"]
-BLEND_COMPETITORS = ["foreca", "fmi_edited", "ecmwf_aifs025_single", "google_weather"]
+# Pairwise family kept lean: blend_learned and blend_ai still appear on every
+# accuracy board, but they earn no CI cells - learned has been indistinguishable
+# from the plain mean since day one, and every extra cell inflates the Holm
+# family that the real claims must survive.
+BLENDS = ["blend_open", "blend_open_yr", "blend_mean"]
+BLEND_COMPETITORS = ["foreca", "fmi_edited", "ecmwf_aifs025_single", "google_weather", "yr"]
 
 
 def _utc(s: str) -> datetime:
