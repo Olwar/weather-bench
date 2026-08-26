@@ -458,7 +458,13 @@ async function evidence(){
          Ties at two decimals are real ties; the sort is stable, so listing
          blend_mean first makes it win them. */
       const r2=v=>Math.round(v*100);
-      const keys=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null));
+      /* Public boards show the product and the real world it competes with.
+         Research blend variants (mean-with-Foreca, weighted, AI-only, +Yr)
+         differ from Ilma by ~0.01 degC and read as "Ilma is second best to
+         four things you cannot use" - they live in the scored JSON and the
+         nightly board, not here. */
+      const keys=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null))
+        .filter(s=>s==="blend_open"||!s.startsWith("blend_"));
       const srcs=["blend_open",...keys.filter(s=>s!=="blend_open")]
         .filter(s=>keys.includes(s))
         .sort((a,b)=>{const av=data[a]["3"]?.[key]??(higher?-9:99),bv=data[b]["3"]?.[key]??(higher?-9:99);
