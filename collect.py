@@ -20,6 +20,7 @@ import re
 import shutil
 import sys
 import time
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -197,6 +198,84 @@ def collect_open_meteo(con, run_time):
     con.commit()
 
 
+GOOGLE_KEY_FILE = Path(__file__).parent / "google_api_key.txt"
+
+
+def collect_google(con, run_time):
+    """Google's Weather API (Maps Platform) - the forecast Pixel/Search users
+    see, WeatherNext/MetNet-powered. COMPETITOR ONLY, never a blend member:
+    Maps Platform terms bar redistribution and building on their content, so it
+    is measured against, exactly like Foreca, but through a licensed API.
+
+    Hourly endpoint pages 24 h at a time out to ~240 h => ~10 calls per city
+    per run, ~21k calls/month at the 5 h cadence (free tier 10k, overage
+    ~$0.15/1k => ~$1.7/month).
+
+    Timestamp convention: Google gives hour intervals. Instantaneous-ish vars
+    are stamped at interval START (matching Open-Meteo's top-of-hour values);
+    the qpf accumulation is stamped at interval END (our rain1h is
+    hour-ending, matching FMI's r_1h).
+    """
+    if not GOOGLE_KEY_FILE.exists():
+        return  # source not configured - benchmark runs fine without it
+    key = GOOGLE_KEY_FILE.read_text().strip()
+    for city in CITIES:
+        try:
+            rows, token, pages = [], None, 0
+            while pages < 12:
+                url = ("https://weather.googleapis.com/v1/forecast/hours:lookup"
+                       f"?key={key}&location.latitude={city['lat']}"
+                       f"&location.longitude={city['lon']}&hours=240&pageSize=24")
+                if token:
+                    url += f"&pageToken={token}"
+                data = http_json(url)
+                if "error" in data:
+                    raise RuntimeError(str(data["error"])[:200])
+                for h in data.get("forecastHours", []):
+                    start = h["interval"]["startTime"][:16] + "Z"
+                    end = h["interval"]["endTime"][:16] + "Z"
+                    def num(*path):
+                        v = h
+                        for k in path:
+                            v = v.get(k) if isinstance(v, dict) else None
+                            if v is None:
+                                return None
+                        return v
+                    for var, val in (
+                        ("t2m", num("temperature", "degrees")),
+                        ("ws", num("wind", "speed", "value")),
+                        ("gust", num("wind", "gust", "value")),
+                        ("wdir", num("wind", "direction", "degrees")),
+                        ("rh", h.get("relativeHumidity")),
+                        ("td", num("dewPoint", "degrees")),
+                        ("cc", h.get("cloudCover")),
+                        ("pmsl", num("airPressure", "meanSeaLevelMillibars")),
+                    ):
+                        if val is None:
+                            continue
+                        if var in ("ws", "gust"):
+                            val = val / 3.6  # km/h -> m/s
+                        rows.append(("google_weather", city["key"], run_time, start, var, float(val)))
+                    qpf = num("precipitation", "qpf", "quantity")
+                    if qpf is not None:
+                        rows.append(("google_weather", city["key"], run_time, end, "rain1h", float(qpf)))
+                token = data.get("nextPageToken")
+                pages += 1
+                if not token:
+                    break
+            if not rows:
+                raise RuntimeError("0 rows parsed")
+            con.executemany(
+                "INSERT OR IGNORE INTO forecasts(source,city,run_time,target_time,var,value) VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+            log(con, run_time, "google_weather", city["key"], len(rows))
+        except Exception as e:  # noqa: BLE001
+            log(con, run_time, "google_weather", city["key"], 0, str(e))
+        time.sleep(0.3)
+    con.commit()
+
+
 def collect_aifs_ensemble(con, run_time):
     """Store the AIFS ensemble mean per hour/variable.
 
@@ -275,6 +354,7 @@ def main():
     collect_fmi_edited(con, run_time)
     collect_open_meteo(con, run_time)
     collect_aifs_ensemble(con, run_time)
+    collect_google(con, run_time)
     collect_obs(con, run_time)
     con.commit()
     errs = con.execute(
