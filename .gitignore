@@ -6,3 +6,4 @@ data/bench.sqlite-shm
 .vercel
 design/**/*.svg.png
 .DS_Store
+CLAUDE.md
