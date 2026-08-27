@@ -251,6 +251,11 @@ def favicon_svg():
     return FileResponse(STATIC / "favicon.svg", media_type="image/svg+xml")
 
 
+@app.get("/og.png")
+def og_png():
+    return FileResponse(STATIC / "og.png", media_type="image/png")
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
@@ -274,6 +279,24 @@ from datetime import datetime, timedelta, timezone
 from common import CITIES, DB_PATH
 
 _ASTATS = {"mtime": 0, "data": None}
+
+
+def _check_again():
+    """Honest re-ask times from the pipeline's own clocks: the next model
+    snapshot lands ~5h after the last stored run, and calibration/verification
+    refresh at the nightly rescore. Agents can schedule their own follow-up."""
+    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    last = con.execute("SELECT MAX(run_time) FROM forecasts").fetchone()[0]
+    con.close()
+    nxt = (datetime.strptime(last, "%Y-%m-%dT%H:%MZ") + timedelta(hours=5))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if nxt < now:
+        nxt = now + timedelta(minutes=30)
+    resc = now.replace(hour=5, minute=45, second=0)
+    if resc < now:
+        resc += timedelta(days=1)
+    return {"next_model_snapshot_utc": nxt.strftime("%Y-%m-%dT%H:%MZ"),
+            "next_verification_refresh_utc": resc.strftime("%Y-%m-%dT%H:%MZ")}
 
 
 def _astats():
@@ -422,7 +445,8 @@ def agent_stability(lat: float, lon: float, date: str):
     verdict = ("stable" if churn <= norm.get("p50", 99) else
                "typical churn" if churn <= norm.get("p80", 99) else
                "unusually jumpy - low confidence, consider deciding later")
-    return {"station_city": city["key"], "station_distance_km": km,
+    return {"check_again_at": _check_again(),
+            "station_city": city["key"], "station_distance_km": km,
             "runs_considered": len(means), "daily_mean_by_run":
                 [{"run": rt, "t2m_mean": round(m, 1)} for rt, m in means],
             "churn_stddev": round(churn, 2), "historical_norm": norm, "verdict": verdict}
@@ -542,6 +566,7 @@ def agent_assess(lat: float, lon: float, start: str, end: str,
                        "p_temp_in_ok_range_worst_hour": p_temp_ok},
            "calibration": {"rain": "verified frequencies", "temp": "verified quantiles",
                            "wind": "raw member exceedance (not yet calibrated)"}}
+    out["check_again_at"] = _check_again()
     if cost_cancel > 0 and cost_ruined > 0:
         ev_go = p_bad * cost_ruined
         out["decision"] = {"recommend": "cancel" if cost_cancel < ev_go else "go",

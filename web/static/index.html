@@ -6,6 +6,15 @@
 <title>Ilma</title>
 <meta name="description" content="Sääennuste, joka yhdistää kuusi ennustemallia ja näyttää, kuinka yksimielisiä ne ovat.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ilma.io">
+<meta property="og:title" content="Ilma">
+<meta property="og:description" content="Kuusi ennustemallia. Yksi todennettu ennuste. Tulokset tarkistetaan oikeilla sääasemilla joka yö.">
+<meta property="og:image" content="https://ilma.io/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://ilma.io/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&family=Karla:ital,wght@0,300..700;1,300..500&display=swap" rel="stylesheet">
@@ -176,6 +185,14 @@ svg{display:block;width:100%;overflow:visible}
   font-size:13.5px;color:rgba(250,246,239,.62);line-height:1.65;max-width:64ch}
 .away b{color:var(--paper);font-weight:500}
 
+/* shared human+agent plan card - hidden until either party writes to it */
+.plan{display:none;margin:clamp(26px,4vw,40px) 0 0;border:1px solid var(--rule);
+  border-radius:16px;padding:20px 22px;background:var(--paper-2)}
+.plan.on{display:block}
+.plan h3{font-family:var(--display);font-weight:400;font-size:20px;margin-bottom:4px}
+.plan .who{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px}
+.plan li{margin:6px 0 6px 18px;font-size:15px;outline:none}
+.plan li:focus{background:var(--paper)}
 footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
 .load{color:var(--ink-3);font-style:italic;padding:16px 0}
 .bad{color:var(--warm);padding:16px 0}
@@ -231,6 +248,12 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
   <div class="label">Kaksi viikkoa</div>
   <div class="week" id="days"></div>
 </section>
+
+<div class="plan" id="plan">
+  <h3 id="planTitle"></h3>
+  <div class="who">Suunnitelma · jaettu tekoälyagentin kanssa · voit muokata rivejä</div>
+  <ul id="planItems"></ul>
+</div>
 
 <details class="trust" id="trust">
   <summary>
@@ -405,6 +428,54 @@ function chart(hs){
     tip.style.top="-10px";
   });
   svg.addEventListener("mouseleave",()=>{tip.classList.remove("on");cx.setAttribute("opacity","0");cd.setAttribute("opacity","0")});
+  /* geometry handle for agent chart annotations (mark_hours) */
+  window._chartCtx={hs,X,P,H,svg};
+  applyMarks();
+}
+
+/* agent-painted highlights: [{start,end,label,kind}] in page-local time */
+window._marks=[];
+function applyMarks(){
+  const c=window._chartCtx; if(!c)return;
+  c.svg.querySelectorAll(".agentmark").forEach(e=>e.remove());
+  for(const m of window._marks){
+    let i0=-1,i1=-1;
+    c.hs.forEach((h,i)=>{if(h.time>=m.start&&i0<0)i0=i;if(h.time<=m.end)i1=i});
+    if(i0<0||i1<i0)continue;
+    const x0=c.X(i0),x1=c.X(i1);
+    const col=m.kind==="good"?"#4E7F63":m.kind==="bad"?"#C0592A":"#3E6E9E";
+    const ns="http://www.w3.org/2000/svg";
+    const r=document.createElementNS(ns,"rect");
+    r.setAttribute("class","agentmark");
+    r.setAttribute("x",x0);r.setAttribute("y",c.P.t-8);
+    r.setAttribute("width",Math.max(3,x1-x0));r.setAttribute("height",c.H-c.P.t-c.P.b+8);
+    r.setAttribute("fill",col);r.setAttribute("opacity","0.14");r.setAttribute("rx","4");
+    c.svg.appendChild(r);
+    if(m.label){
+      const t=document.createElementNS(ns,"text");
+      t.setAttribute("class","agentmark");
+      t.setAttribute("x",(x0+x1)/2);t.setAttribute("y",c.P.t+4);
+      t.setAttribute("text-anchor","middle");t.setAttribute("fill",col);
+      t.setAttribute("font-size","12");t.setAttribute("font-family","Karla");
+      t.textContent=m.label;c.svg.appendChild(t);
+    }
+  }
+}
+
+/* shared plan state */
+window._plan=null;
+function renderPlan(){
+  const el=document.querySelector("#plan");
+  if(!window._plan){el.classList.remove("on");return}
+  el.classList.add("on");
+  document.querySelector("#planTitle").textContent=window._plan.title||"Suunnitelma";
+  const ul=document.querySelector("#planItems");ul.innerHTML="";
+  window._plan.items.forEach((it,i)=>{
+    const li=document.createElement("li");
+    li.textContent=it.text;li.contentEditable="true";
+    li.addEventListener("input",()=>{window._plan.items[i].text=li.textContent;window._plan.items[i].edited_by_human=true});
+    ul.appendChild(li);
+  });
 }
 
 function week(hs){
@@ -537,19 +608,31 @@ evidence();
   const J=o=>({content:[{type:"text",text:JSON.stringify(o)}]});
   const api=async p=>{const r=await fetch(p);if(!r.ok)throw new Error(await r.text());return r.json()};
   async function place(q){
+    // No place given -> the place the HUMAN is currently viewing. This is the
+    // WebMCP-native default: "is Saturday safe?" needs no arguments at all.
+    if(!q){
+      if(CUR)return {lat:CUR.lat,lon:CUR.lon,
+        name:document.querySelector("#city").textContent,
+        sub:document.querySelector("#loc").textContent,fromView:true};
+      throw new Error("no place given and nothing on screen yet");
+    }
     const d=await api(`/api/geocode?q=${encodeURIComponent(q)}`);
-    if(!d.results||!d.results.length)throw new Error("place not found: "+q);
+    if(!d.results||!d.results.length){
+      const alt=await api(`/api/geocode?q=${encodeURIComponent(q.slice(0,Math.max(3,q.length-2)))}`);
+      const sugg=(alt.results||[]).slice(0,3).map(r=>r.name+", "+(r.country||"")).join(" | ");
+      throw new Error(`place not found: "${q}"${sugg?" - did you mean: "+sugg:""}`);
+    }
     const p=d.results[0];return {lat:p.lat,lon:p.lon,name:p.name,sub:[p.admin1,p.country].filter(Boolean).join(", ")};
   }
-  const P={place:{type:"string",description:"City or place name, any country"}};
-  const W={...P,start:{type:"string",description:"Window start, local time, YYYY-MM-DDTHH:MM"},
-             end:{type:"string",description:"Window end, local time, YYYY-MM-DDTHH:MM"}};
+  const P={place:{type:"string",description:"City or place name, any country. OMIT to use the place the human is currently viewing on screen."}};
+  const W={...P,start:{type:"string",description:"Window start, local time, e.g. 2026-08-29T16:00"},
+             end:{type:"string",description:"Window end, local time, e.g. 2026-08-29T22:00"}};
   const req=(props,...r)=>({type:"object",properties:props,required:r});
 
   const TOOLS=[
   {name:"get_forecast",
    description:"Blended multi-model forecast for any place on earth. Every hour includes the blend AND the min-max range across models - treat a wide range as low confidence.",
-   schema:req({...P,hours:{type:"number",description:"How many hours ahead (max 168, default 48)"}},"place"),
+   schema:req({...P,hours:{type:"number",description:"How many hours ahead (max 168, default 48)"}}),
    handler:async a=>{
      const p=await place(a.place);
      const d=await api(`/api/forecast?lat=${p.lat}&lon=${p.lon}`);
@@ -561,19 +644,19 @@ evidence();
    }},
   {name:"get_probability",
    description:"Calibrated probability that temperature stays within [lo,hi] C for each hour of a window - from 30+ days of verified forecast errors conditioned on lead time and live model disagreement.",
-   schema:req({...W,lo:{type:"number"},hi:{type:"number"}},"place","start","end"),
+   schema:req({...W,lo:{type:"number"},hi:{type:"number"}},"start","end"),
    handler:async a=>{const p=await place(a.place);
      return api(`/api/agent/probability?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}&lo=${a.lo??-99}&hi=${a.hi??99}`)}},
   {name:"get_rain_probability",
    description:"Calibrated probability of measurable rain (>=0.1mm) per hour in a local-time window, from verified observed frequencies - not the model's raw output.",
-   schema:req(W,"place","start","end"),
+   schema:req(W,"start","end"),
    handler:async a=>{const p=await place(a.place);
      return api(`/api/agent/rain?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}`)}},
   {name:"assess_plan",
    description:"Decision support for an outdoor plan: P(conditions bad) with per-driver breakdown. Pass cost_cancel and cost_ruined (any currency) for an expected-value recommendation with the flip point.",
    schema:req({...W,rain_bad_mm:{type:"number"},wind_bad_ms:{type:"number"},
      tmin_ok:{type:"number"},tmax_ok:{type:"number"},
-     cost_cancel:{type:"number"},cost_ruined:{type:"number"}},"place","start","end"),
+     cost_cancel:{type:"number"},cost_ruined:{type:"number"}},"start","end"),
    handler:async a=>{const p=await place(a.place);
      const q=new URLSearchParams({lat:p.lat,lon:p.lon,start:a.start,end:a.end,
        rain_bad_mm:a.rain_bad_mm??0.5,wind_bad_ms:a.wind_bad_ms??10,
@@ -582,17 +665,17 @@ evidence();
      return api(`/api/agent/assess?${q}`)}},
   {name:"get_stability",
    description:"How much the forecast for a date (YYYY-MM-DD) has been changing between successive model runs, vs historical churn at this lead. Jumpy = decide later even if today's spread looks narrow. No other weather product exposes this.",
-   schema:req({...P,date:{type:"string",description:"Target date YYYY-MM-DD"}},"place","date"),
+   schema:req({...P,date:{type:"string",description:"Target date YYYY-MM-DD"}},"date"),
    handler:async a=>{const p=await place(a.place);
      return api(`/api/agent/stability?lat=${p.lat}&lon=${p.lon}&date=${a.date}`)}},
   {name:"when_to_decide",
    description:"The verified error-vs-lead curve between now and event_date: exactly what waiting to decide buys in expected forecast accuracy.",
-   schema:req({...P,event_date:{type:"string",description:"YYYY-MM-DD"}},"place","event_date"),
+   schema:req({...P,event_date:{type:"string",description:"YYYY-MM-DD"}},"event_date"),
    handler:async a=>{const p=await place(a.place);
      return api(`/api/agent/decide_by?lat=${p.lat}&lon=${p.lon}&event_date=${a.event_date}`)}},
   {name:"get_scenarios",
    description:"Coherent per-model scenarios over a window - each model is one physical world, so the cold outcome is usually also the wet, windy one. Plan branches, not averages.",
-   schema:req(W,"place","start","end"),
+   schema:req(W,"start","end"),
    handler:async a=>{const p=await place(a.place);
      return api(`/api/agent/scenarios?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}`)}},
   {name:"why_trust_this",
@@ -613,6 +696,65 @@ evidence();
    schema:req({country:{type:"string",description:"fi|se|dk|de|us"},
      var:{type:"string",description:"t2m|ws|cc|rain"}}),
    handler:async a=>api(`/api/agent/best_source?country=${a.country||"fi"}&var=${a.var||"t2m"}`)},
+  {name:"get_current_view",
+   description:"What the HUMAN is looking at right now: place, coordinates, model agreement. Call this to resolve 'here'/'this place', or before answering location-less questions.",
+   schema:req({}),
+   handler:async()=>{
+     if(!CUR)return {viewing:null};
+     const hrs=CUR.hours.filter(h=>h.t2m);
+     let i=hrs.findIndex(h=>h.time.slice(0,13)>=localKey(CUR.utc_offset_seconds));if(i<0)i=0;
+     const h=hrs[i];
+     return {viewing:{place:document.querySelector("#city").textContent,
+       region:document.querySelector("#loc").textContent,lat:CUR.lat,lon:CUR.lon,
+       local_time:h.time,now_t2m:h.t2m.blend,model_range:[h.t2m.lo,h.t2m.hi],
+       plan_on_screen:window._plan}};}},
+  {name:"mark_hours",
+   description:"Paint a highlight onto the temperature chart the human is viewing - use it to SHOW your reasoning: the risky window, the recommended window. kind: good|bad|info. Times local, e.g. 2026-08-29T16:00.",
+   schema:req({start:{type:"string"},end:{type:"string"},
+     label:{type:"string",description:"Short label drawn on the chart"},
+     kind:{type:"string",description:"good | bad | info"},
+     clear:{type:"boolean",description:"true = remove all previous marks first"}},"start","end"),
+   handler:async a=>{
+     if(a.clear)window._marks=[];
+     window._marks.push({start:a.start,end:a.end,label:a.label||"",kind:a.kind||"info"});
+     applyMarks();
+     document.querySelector("#chart").scrollIntoView({behavior:"smooth",block:"center"});
+     return {marked:window._marks.length+" highlight(s) now on the visible chart"};}},
+  {name:"clear_marks",description:"Remove every highlight you have painted on the chart.",
+   schema:req({}),handler:async()=>{window._marks=[];applyMarks();return {cleared:true}}},
+  {name:"set_plan",
+   description:"Write the shared plan card on the page - the artifact you and the human build together. The human can edit lines by clicking them; read edits back with get_plan.",
+   schema:{type:"object",properties:{title:{type:"string"},
+     items:{type:"array",items:{type:"string"},description:"Plan lines, e.g. 'Sauna la 18-22' or 'Plan B: sisatilat jos sadeskenario'"}},required:["items"]},
+   handler:async a=>{
+     const items=(Array.isArray(a.items)?a.items:JSON.parse(a.items)).map(t=>({text:String(t)}));
+     window._plan={title:a.title||"Suunnitelma",items};
+     renderPlan();
+     document.querySelector("#plan").scrollIntoView({behavior:"smooth",block:"center"});
+     return {plan_shown:true,items:items.length};}},
+  {name:"get_plan",
+   description:"Read the shared plan card, including lines the human has edited (edited_by_human=true). Check it before changing the plan.",
+   schema:req({}),handler:async()=>({plan:window._plan})},
+  {name:"compare_places",
+   description:"Rank 2-5 places for the same local-time window by P(conditions bad), with drivers. E.g. 'Berlin or Hamburg for Saturday evening?'",
+   schema:{type:"object",properties:{
+     places:{type:"array",items:{type:"string"}},
+     start:{type:"string",description:"e.g. 2026-08-29T16:00"},end:{type:"string"},
+     rain_bad_mm:{type:"number"},wind_bad_ms:{type:"number"}},
+     required:["places","start","end"]},
+   handler:async a=>{
+     const names=(Array.isArray(a.places)?a.places:JSON.parse(a.places)).slice(0,5);
+     const out=[];
+     for(const n of names){
+       try{const p=await place(n);
+         const q=new URLSearchParams({lat:p.lat,lon:p.lon,start:a.start,end:a.end,
+           rain_bad_mm:a.rain_bad_mm??0.5,wind_bad_ms:a.wind_bad_ms??10});
+         const r=await api(`/api/agent/assess?${q}`);
+         out.push({place:p.name+", "+p.sub,p_bad:r.p_bad,drivers:r.drivers});
+       }catch(e){out.push({place:n,error:String(e.message||e)})}
+     }
+     out.sort((x,y)=>(x.p_bad??9)-(y.p_bad??9));
+     return {ranked_best_first:out};}},
   {name:"show_me",
    description:"Drive the visible page: load a place so the human sees exactly what you are reasoning about. Call this whenever you discuss a specific place with the user.",
    schema:req(P,"place"),
@@ -630,6 +772,15 @@ evidence();
         inputSchema:t.schema,
         execute:async args=>J(await t.handler(args||{}))});}catch(e){}
     }
+  }
+  // Verification evidence as a RESOURCE too, where the surface supports it
+  const ctx0=document.modelContext||navigator.modelContext||window.modelContext;
+  if(ctx0&&ctx0.registerResource){
+    try{ctx0.registerResource({uri:"ilma://verification",name:"Verification record",
+      description:"Nightly-verified accuracy of this blend vs named competitors",
+      mimeType:"application/json",
+      read:async()=>({contents:[{uri:"ilma://verification",mimeType:"application/json",
+        text:JSON.stringify(await api("/api/stats"))}]})});}catch(e){}
   }
   // Surface 2: the widget bridge (Claude Desktop via local relay)
   if(typeof WebMCP!=="undefined"){
