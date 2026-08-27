@@ -784,8 +784,13 @@ evidence();
      const p=await place(a.place);
      const d=await api(`/api/forecast?lat=${p.lat}&lon=${p.lon}`);
      const n=Math.min(Number(a.hours)||48,168);
+     // Open-Meteo hours start at local MIDNIGHT - slicing from 0 made the
+     // model read 00:00 as "now" and report last night's temperature.
+     const all=d.hours.filter(h=>h.t2m);
+     let i0=all.findIndex(h=>h.time.slice(0,13)>=localKey(d.utc_offset_seconds));
+     if(i0<0)i0=0;
      return {place:p.name+", "+p.sub,models:d.members.length,
-       hours:d.hours.filter(h=>h.t2m).slice(0,n).map(h=>({time:h.time,
+       hours:all.slice(i0,i0+n).map(h=>({time:h.time,
          t2m:h.t2m.blend,t2m_range:[h.t2m.lo,h.t2m.hi],
          rain_mm:h.rain1h?h.rain1h.blend:null,wind_ms:h.ws?h.ws.blend:null}))};
    }},
@@ -969,6 +974,23 @@ evidence();
     function:{name:t.name,description:t.description,parameters:t.schema}}));
   function bubble(cls,text){const d=document.createElement("div");d.className="ai-m "+cls;
     d.textContent=text;msgsEl.appendChild(d);msgsEl.scrollTop=msgsEl.scrollHeight;return d}
+  /* minimal, safe markdown: escape everything first, then re-introduce only
+     bold/italic/code/bullets - the model loves **bold** and judges saw
+     literal asterisks */
+  function md(t){
+    const esc=t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return esc.split(/\n/).map(line=>{
+      let l=line
+        .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,"$1<i>$2</i>")
+        .replace(/`([^`]+)`/g,"<code>$1</code>");
+      if(/^\s*[-•]\s+/.test(l)) l="&nbsp;&nbsp;•&nbsp;"+l.replace(/^\s*[-•]\s+/,"");
+      return l;
+    }).join("<br>").replace(/(<br>){3,}/g,"<br><br>");
+  }
+  function setAnswer(el,text){el.innerHTML=md(text);
+    msgsEl.appendChild(el); /* move below any tool chips */
+    msgsEl.scrollTop=msgsEl.scrollHeight;}
   async function send(){
     const q=inp.value.trim();if(!q)return;
     inp.value="";bubble("u",q);
@@ -986,6 +1008,7 @@ evidence();
           for(const tc of message.tool_calls){
             const tool=(window._ilmaTools||[]).find(t=>t.name===tc.function.name);
             bubble("t","✳ "+tc.function.name);
+            msgsEl.appendChild(thinking); /* keep the pending answer below the chips */
             let out;
             try{out=await tool.handler(JSON.parse(tc.function.arguments||"{}"));}
             catch(e){out={error:String(e.message||e)}}
@@ -993,7 +1016,7 @@ evidence();
           }
           continue;
         }
-        thinking.textContent=message.content||L.chatEmpty;
+        setAnswer(thinking,message.content||L.chatEmpty);
         return;
       }
       thinking.textContent=L.chatRounds;
