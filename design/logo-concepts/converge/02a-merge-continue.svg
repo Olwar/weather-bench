@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#FAF6EF"/>
+  <!-- six lines merge and continue as one verified line -->
+  <g stroke-width="5" fill="none" stroke-linecap="round">
+    <path d="M130 90  C 200 95, 250 140, 300 150" stroke="#8FB4D4"/>
+    <path d="M130 114 C 200 116, 250 142, 300 150" stroke="#3E6E9E"/>
+    <path d="M130 138 C 200 138, 250 146, 300 150" stroke="#4E7F63"/>
+    <path d="M130 162 C 200 162, 250 154, 300 150" stroke="#7FA08C"/>
+    <path d="M130 186 C 200 184, 250 158, 300 150" stroke="#C0592A"/>
+    <path d="M130 210 C 200 205, 250 162, 300 150" stroke="#E8B98A"/>
+  </g>
+  <path d="M300 150 L470 150" stroke="#181513" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="300" cy="150" r="9" fill="#181513"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="86" font-weight="600" fill="#181513">Ilma</text>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
+  <rect width="640" height="200" fill="#FAF6EF"/>
+  <!-- horizontal lockup: small mark left, wordmark right -->
+  <g fill="none" stroke="#CDBFAC" stroke-width="3">
+    <ellipse cx="120" cy="146" rx="52" ry="10" opacity=".45"/>
+    <ellipse cx="120" cy="144" rx="30" ry="6" opacity=".7"/>
+  </g>
+  <g stroke-width="4.5" fill="none" stroke-linecap="round">
+    <path d="M66 42  C 72 90, 103 126, 119 141" stroke="#8FB4D4"/>
+    <path d="M88 38  C 92 88, 108 124, 119.5 141" stroke="#3E6E9E"/>
+    <path d="M109 36 C 111 86, 116 123, 120 141" stroke="#4E7F63"/>
+    <path d="M131 36 C 129 86, 124 123, 120 141" stroke="#7FA08C"/>
+    <path d="M152 38 C 148 88, 132 124, 120.5 141" stroke="#C0592A"/>
+    <path d="M174 42 C 168 90, 137 126, 121 141" stroke="#E8B98A"/>
+  </g>
+  <circle cx="120" cy="142" r="5.5" fill="#181513"/>
+  <text x="220" y="134" text-anchor="start" font-family="Fraunces, Georgia, serif" font-size="86" font-weight="600" fill="#181513">Ilma</text>
+</svg>

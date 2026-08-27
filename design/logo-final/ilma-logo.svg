@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#FAF6EF"/>
+  <!-- ripples: a raindrop hits water -->
+  <g fill="none" stroke="#CDBFAC" stroke-width="4">
+    <ellipse cx="256" cy="326" rx="104" ry="20" opacity=".45"/>
+    <ellipse cx="256" cy="324" rx="64" ry="12" opacity=".7"/>
+    <ellipse cx="256" cy="322" rx="30" ry="6"/>
+  </g>
+  <!-- six forecast lines fall to one point -->
+  <g stroke-width="7" fill="none" stroke-linecap="round">
+    <path d="M148 78 C 160 170, 220 280, 254 316" stroke="#8FB4D4"/>
+    <path d="M191 70 C 198 165, 232 278, 255 316" stroke="#3E6E9E"/>
+    <path d="M234 66 C 237 160, 248 276, 256 316" stroke="#4E7F63"/>
+    <path d="M278 66 C 275 160, 264 276, 256 316" stroke="#7FA08C"/>
+    <path d="M321 70 C 314 165, 280 278, 257 316" stroke="#C0592A"/>
+    <path d="M364 78 C 352 170, 292 280, 258 316" stroke="#E8B98A"/>
+  </g>
+  <circle cx="256" cy="318" r="9" fill="#181513"/>
+  <text x="256" y="452" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="104" font-weight="600" fill="#181513">Ilma</text>
+</svg>

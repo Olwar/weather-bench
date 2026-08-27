@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- mark only, favicon-ready: no background, thicker strokes for small sizes -->
+  <g fill="none" stroke="#CDBFAC" stroke-width="12">
+    <ellipse cx="256" cy="386" rx="150" ry="30" opacity=".45"/>
+    <ellipse cx="256" cy="382" rx="88" ry="17" opacity=".7"/>
+  </g>
+  <g stroke-width="22" fill="none" stroke-linecap="round">
+    <path d="M110 60 C 128 190, 210 320, 250 368" stroke="#8FB4D4"/>
+    <path d="M168 48 C 178 180, 226 316, 252 368" stroke="#3E6E9E"/>
+    <path d="M226 42 C 230 175, 246 314, 255 368" stroke="#4E7F63"/>
+    <path d="M286 42 C 282 175, 266 314, 257 368" stroke="#7FA08C"/>
+    <path d="M344 48 C 334 180, 286 316, 260 368" stroke="#C0592A"/>
+    <path d="M402 60 C 384 190, 302 320, 262 368" stroke="#E8B98A"/>
+  </g>
+  <circle cx="256" cy="374" r="26" fill="#181513"/>
+</svg>

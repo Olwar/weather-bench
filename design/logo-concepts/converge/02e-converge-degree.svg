@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#FAF6EF"/>
+  <!-- lines converge to a degree ring instead of a dot -->
+  <g stroke-width="5" fill="none" stroke-linecap="round">
+    <path d="M150 80  C 230 90, 290 130, 348 146" stroke="#8FB4D4"/>
+    <path d="M150 108 C 230 110, 290 134, 346 148" stroke="#3E6E9E"/>
+    <path d="M150 136 C 230 135, 290 142, 344 150" stroke="#4E7F63"/>
+    <path d="M150 164 C 230 163, 290 158, 344 152" stroke="#7FA08C"/>
+    <path d="M150 192 C 230 188, 290 166, 346 154" stroke="#C0592A"/>
+    <path d="M150 220 C 230 212, 290 172, 348 156" stroke="#E8B98A"/>
+  </g>
+  <circle cx="378" cy="150" r="22" fill="#FAF6EF" stroke="#181513" stroke-width="9"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="86" font-weight="600" fill="#181513">Ilma</text>
+</svg>

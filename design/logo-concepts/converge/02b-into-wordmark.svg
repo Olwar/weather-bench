@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#FAF6EF"/>
+  <!-- lines flow from the left directly into the I of the wordmark -->
+  <g stroke-width="5" fill="none" stroke-linecap="round">
+    <path d="M60 130  C 110 135, 150 195, 192 208" stroke="#8FB4D4"/>
+    <path d="M60 160  C 110 162, 150 198, 192 208" stroke="#3E6E9E"/>
+    <path d="M60 190  C 110 190, 150 202, 192 208" stroke="#4E7F63"/>
+    <path d="M60 220  C 110 220, 150 212, 192 208" stroke="#7FA08C"/>
+    <path d="M60 250  C 110 248, 150 218, 192 208" stroke="#C0592A"/>
+    <path d="M60 280  C 110 274, 150 224, 192 208" stroke="#E8B98A"/>
+  </g>
+  <text x="205" y="245" text-anchor="start" font-family="Fraunces, Georgia, serif" font-size="110" font-weight="600" fill="#181513">Ilma</text>
+</svg>

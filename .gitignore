@@ -3,3 +3,6 @@ data/backups/
 __pycache__/
 data/bench.sqlite-wal
 data/bench.sqlite-shm
+.vercel
+design/**/*.svg.png
+.DS_Store

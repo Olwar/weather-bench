@@ -246,6 +246,11 @@ def webmcp_js():
     return FileResponse(STATIC / "webmcp.js", media_type="application/javascript")
 
 
+@app.get("/favicon.svg")
+def favicon_svg():
+    return FileResponse(STATIC / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")

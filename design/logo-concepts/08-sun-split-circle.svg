@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#FAF6EF"/>
+  <!-- circle split: forecast (flat sky) above, verified truth (warm) below -->
+  <path d="M210 150 A90 90 0 0 1 390 150 Z" fill="#8FB4D4"/>
+  <path d="M390 150 A90 90 0 0 1 210 150 Z" fill="#C0592A"/>
+  <line x1="196" y1="150" x2="404" y2="150" stroke="#FAF6EF" stroke-width="10"/>
+  <circle cx="300" cy="150" r="90" fill="none" stroke="#181513" stroke-width="7"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="86" font-weight="600" fill="#181513">Ilma</text>
+</svg>

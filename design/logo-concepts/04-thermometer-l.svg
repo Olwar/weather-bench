@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#FAF6EF"/>
+  <!-- the letter l of the wordmark is a thermometer -->
+  <text x="175" y="235" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="130" font-weight="600" fill="#181513">I</text>
+  <text x="278" y="235" text-anchor="start" font-family="Fraunces, Georgia, serif" font-size="130" font-weight="600" fill="#181513">ma</text>
+  <g>
+    <rect x="228" y="118" width="20" height="80" rx="10" fill="none" stroke="#181513" stroke-width="7"/>
+    <circle cx="238" cy="214" r="20" fill="#C0592A"/>
+    <rect x="232" y="158" width="12" height="50" fill="#C0592A"/>
+    <line x1="256" y1="136" x2="266" y2="136" stroke="#181513" stroke-width="4"/>
+    <line x1="256" y1="154" x2="266" y2="154" stroke="#181513" stroke-width="4"/>
+    <line x1="256" y1="172" x2="266" y2="172" stroke="#181513" stroke-width="4"/>
+  </g>
+  <text x="300" y="325" text-anchor="middle" font-family="Karla, sans-serif" font-size="16" letter-spacing="5" fill="#3E6E9E">ILMA · TODENNETUT ENNUSTEET</text>
+</svg>
