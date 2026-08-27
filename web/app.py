@@ -281,13 +281,25 @@ from common import CITIES, DB_PATH
 _ASTATS = {"mtime": 0, "data": None}
 
 
+_CHECK_CACHE = {"t": 0.0, "last": None}
+
+
 def _check_again():
     """Honest re-ask times from the pipeline's own clocks: the next model
     snapshot lands ~5h after the last stored run, and calibration/verification
-    refresh at the nightly rescore. Agents can schedule their own follow-up."""
-    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-    last = con.execute("SELECT MAX(run_time) FROM forecasts").fetchone()[0]
-    con.close()
+    refresh at the nightly rescore. Agents can schedule their own follow-up.
+
+    The naive MAX(run_time) is a full scan of a 30M-row table (run_time is
+    third in the PK) and took minutes - it hung every assess call. Scoping to
+    one always-collected source rides the index; a 60 s cache absorbs bursts."""
+    if time.time() - _CHECK_CACHE["t"] > 60:
+        con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        _CHECK_CACHE["last"] = con.execute(
+            "SELECT MAX(run_time) FROM forecasts WHERE source='ecmwf_ifs025'"
+        ).fetchone()[0]
+        _CHECK_CACHE["t"] = time.time()
+        con.close()
+    last = _CHECK_CACHE["last"]
     nxt = (datetime.strptime(last, "%Y-%m-%dT%H:%MZ") + timedelta(hours=5))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     if nxt < now:
