@@ -213,10 +213,16 @@ def main():
     print(f"  blend_open    {n4:>9,} rows", flush=True)
     n5 = unweighted(con, "blend_open_yr", OPEN_YR_MEMBERS)
     print(f"  blend_open_yr {n5:>9,} rows", flush=True)
-    print("  training walk-forward weights...", flush=True)
-    w = train_weights(con)
-    n3 = learned(con, w)
-    print(f"  blend_learned {n3:>9,} rows", flush=True)
+    # blend_learned is opt-in since 2026-08-27: its weights have been
+    # indistinguishable from the plain mean for the entire record, it is
+    # absent from the public site and the inference family, and its
+    # walk-forward training was ~57 min of the nightly hour at 32 cities.
+    # The verdict it existed to deliver is delivered: weighting buys nothing.
+    if "--with-learned" in sys.argv:
+        print("  training walk-forward weights...", flush=True)
+        w = train_weights(con)
+        n3 = learned(con, w)
+        print(f"  blend_learned {n3:>9,} rows", flush=True)
     con.commit()
     print("done - now run score.py", flush=True)
 
