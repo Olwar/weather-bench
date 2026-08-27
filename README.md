@@ -102,7 +102,7 @@ idempotent.
 
 ## Deployment (moved off the laptop 2026-08-19)
 
-Collection, scoring and the public site all run on `root@89.167.5.149` (Ubuntu
+Collection, scoring and the public site all run on a Hetzner VPS (Ubuntu
 24.04, Hetzner Helsinki). The laptop's launchd agent is disabled - its plist is
 renamed `.disabled` - so exactly one collector writes to exactly one database.
 
