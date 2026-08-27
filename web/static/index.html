@@ -335,6 +335,10 @@ en:{
   c:{rain:"Rain",drizzle:"Light rain",clear:"Clear",clearNight:"Clear night",cloudy:"Cloudy",partly:"Partly cloudy",sunny:"Sunny"},
   defaultSub:"Uusimaa, Finland",
   beatFmi:"the Finnish Meteorological Institute's meteorologists", beatBest:"the best single model",
+  chatFab:"Ask Ilma ✳", chatTitle:"Ask Ilma",
+  chatGreeting:"Hi! I'm Ilma's own agent — I use exactly the same tools as the browser agents. Try: \u201cIs Saturday evening good for a barbecue?\u201d",
+  chatPh:"Ask about the weather…", chatSend:"Ask", chatErr:"Error: ",
+  chatRounds:"(too many tool rounds — try a narrower question)", chatEmpty:"(no answer)",
   headAll:"This forecast has been <b>more accurate than everything we compare it to</b> — Foreca, the Finnish Meteorological Institute's meteorologists and every model it uses",
   headSome:list=>`This forecast has been <b>more accurate</b> than ${list}`, and:" and ",
   day:l=>`Day ${l}`,
@@ -359,6 +363,10 @@ en:{
   locale:"en-GB"
 },
 fi:{
+  chatFab:"Kysy Ilmalta ✳", chatTitle:"Kysy Ilmalta",
+  chatGreeting:"Hei! Olen Ilman oma agentti — käytän täsmälleen samoja työkaluja kuin selainagentit. Kysy vaikka: \u201dSopiiko lauantai-ilta grillaamiseen?\u201d",
+  chatPh:"Kysy säästä…", chatSend:"Kysy", chatErr:"Virhe: ",
+  chatRounds:"(liikaa työkalukierroksia — yritä tarkentaa kysymystä)", chatEmpty:"(ei vastausta)",
   searchPh:"Hae mikä tahansa paikka…",
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
@@ -408,6 +416,7 @@ function applyStatic(){
   $("#footerTxt").textContent=L.footer;
   document.querySelectorAll(".load").forEach(e=>e.textContent=L.loading);
   document.querySelectorAll("#lang button").forEach(b=>b.classList.toggle("on",b.dataset.l===LANG));
+  if(window._applyChatLang)window._applyChatLang();
 }
 document.querySelectorAll("#lang button").forEach(b=>b.addEventListener("click",()=>{
   if(b.dataset.l===LANG)return;
@@ -947,6 +956,15 @@ evidence();
   fab.onclick=()=>{panel.classList.add("on");fab.style.display="none";inp.focus()};
   $("#aiClose").onclick=()=>{panel.classList.remove("on");fab.style.display=""};
   const hist=[];
+  window._applyChatLang=function(){
+    fab.textContent=L.chatFab;
+    panel.querySelector(".ai-head b").textContent=L.chatTitle;
+    inp.placeholder=L.chatPh;
+    $("#aiSend").textContent=L.chatSend;
+    const first=msgsEl.querySelector(".ai-m.a");
+    if(first&&msgsEl.children.length===1)first.textContent=L.chatGreeting;
+  };
+  window._applyChatLang();
   const oaTools=()=> (window._ilmaTools||[]).map(t=>({type:"function",
     function:{name:t.name,description:t.description,parameters:t.schema}}));
   function bubble(cls,text){const d=document.createElement("div");d.className="ai-m "+cls;
@@ -954,7 +972,7 @@ evidence();
   async function send(){
     const q=inp.value.trim();if(!q)return;
     inp.value="";bubble("u",q);
-    hist.push({role:"user",content:q+`\n[context: today is ${new Date().toISOString().slice(0,10)}, page shows ${document.querySelector("#city").textContent}]`});
+    hist.push({role:"user",content:q+`\n[context: today is ${new Date().toISOString().slice(0,10)}, page shows ${document.querySelector("#city").textContent}, ui language ${LANG}]`});
     const thinking=bubble("a","…");
     try{
       for(let round=0;round<6;round++){
@@ -975,11 +993,11 @@ evidence();
           }
           continue;
         }
-        thinking.textContent=message.content||"(ei vastausta)";
+        thinking.textContent=message.content||L.chatEmpty;
         return;
       }
-      thinking.textContent="(liikaa työkalukierroksia — yritä tarkentaa kysymystä)";
-    }catch(e){thinking.textContent="Virhe: "+String(e.message||e).slice(0,160)}
+      thinking.textContent=L.chatRounds;
+    }catch(e){thinking.textContent=L.chatErr+String(e.message||e).slice(0,160)}
   }
   $("#aiSend").onclick=send;
   inp.addEventListener("keydown",e=>{if(e.key==="Enter")send()});
