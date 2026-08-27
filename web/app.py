@@ -627,9 +627,11 @@ def agent_chat(payload: dict):
 
     msgs = payload.get("messages") or []
     tools = payload.get("tools") or []
-    if not isinstance(msgs, list) or len(msgs) > 24:
+    if not isinstance(msgs, list) or len(msgs) > 48:
         raise HTTPException(400, "bad messages")
-    if sum(len(json.dumps(m)) for m in msgs) > 24000:
+    # roomy: a multi-city question legitimately carries several tool results;
+    # the client trims stale ones, this is just the abuse backstop
+    if sum(len(json.dumps(m)) for m in msgs) > 150000:
         raise HTTPException(400, "conversation too long")
 
     body = json.dumps({

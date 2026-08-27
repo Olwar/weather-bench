@@ -220,10 +220,12 @@ svg{display:block;width:100%;overflow:visible}
 .ai-m.a{align-self:flex-start;background:var(--paper-2);border-bottom-left-radius:4px}
 .ai-m.t{align-self:flex-start;font-size:12px;color:var(--ink-3);font-family:var(--display);
   font-style:italic;padding:0 4px}
-.ai-in{display:flex;gap:8px;padding:12px;border-top:1px solid var(--rule)}
-.ai-in input{flex:1;border:1px solid var(--rule);border-radius:99px;padding:10px 16px;
-  font-family:var(--body);font-size:14.5px;outline:none;background:var(--paper)}
-.ai-in input:focus{border-color:var(--ink-2)}
+.ai-in{display:flex;gap:8px;padding:12px;border-top:1px solid var(--rule);align-items:flex-end}
+.ai-in textarea{flex:1;border:1px solid var(--rule);border-radius:18px;padding:10px 16px;
+  font-family:var(--body);font-size:14.5px;outline:none;background:var(--paper);
+  resize:none;line-height:1.45;max-height:120px;overflow-y:auto}
+.ai-in textarea:focus{border-color:var(--ink-2)}
+.ai-in button{height:40px}
 .ai-in button{background:var(--accent);color:#fff;border:0;border-radius:99px;padding:0 18px;
   font-size:14.5px;cursor:pointer}
 footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
@@ -305,7 +307,7 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
   <div class="ai-msgs" id="aiMsgs">
     <div class="ai-m a">Hei! Olen Ilman oma agentti — käytän täsmälleen samoja työkaluja kuin selainagentit. Kysy vaikka: ”Sopiiko lauantai-ilta grillaamiseen?”</div>
   </div>
-  <div class="ai-in"><input id="aiInput" placeholder="Kysy säästä…" autocomplete="off">
+  <div class="ai-in"><textarea id="aiInput" rows="1" placeholder="Kysy säästä…" autocomplete="off"></textarea>
     <button id="aiSend">Kysy</button></div>
 </div>
 
@@ -791,8 +793,9 @@ evidence();
      if(i0<0)i0=0;
      return {place:p.name+", "+p.sub,models:d.members.length,
        hours:all.slice(i0,i0+n).map(h=>({time:h.time,
-         t2m:h.t2m.blend,t2m_range:[h.t2m.lo,h.t2m.hi],
-         rain_mm:h.rain1h?h.rain1h.blend:null,wind_ms:h.ws?h.ws.blend:null}))};
+         t2m:+h.t2m.blend.toFixed(1),t2m_range:[+h.t2m.lo.toFixed(1),+h.t2m.hi.toFixed(1)],
+         rain_mm:h.rain1h?+h.rain1h.blend.toFixed(2):null,
+         wind_ms:h.ws?+h.ws.blend.toFixed(1):null}))};
    }},
   {name:"get_probability",
    description:"Calibrated probability that temperature stays within [lo,hi] C for each hour of a window - from 30+ days of verified forecast errors conditioned on lead time and live model disagreement.",
@@ -998,9 +1001,13 @@ evidence();
     const thinking=bubble("a","…");
     try{
       for(let round=0;round<6;round++){
+        /* old tool payloads have served their purpose - keep the tail intact,
+           truncate the rest so multi-tool questions can't blow the size cap */
+        const wire=hist.map((m,i)=>(m.role==="tool"&&i<hist.length-8&&(m.content||"").length>600)
+          ?{...m,content:m.content.slice(0,600)+"…[trimmed]"}:m);
         const r=await fetch("/api/agent/chat",{method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({messages:hist,tools:oaTools()})});
+          body:JSON.stringify({messages:wire,tools:oaTools()})});
         if(!r.ok)throw new Error(await r.text());
         const {message}=await r.json();
         hist.push(message);
@@ -1023,7 +1030,11 @@ evidence();
     }catch(e){thinking.textContent=L.chatErr+String(e.message||e).slice(0,160)}
   }
   $("#aiSend").onclick=send;
-  inp.addEventListener("keydown",e=>{if(e.key==="Enter")send()});
+  function autosize(){inp.style.height="auto";inp.style.height=Math.min(inp.scrollHeight,120)+"px"}
+  inp.addEventListener("input",autosize);
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();inp.style.height="auto"}
+  });
 })();
 </script>
 </body>
