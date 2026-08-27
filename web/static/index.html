@@ -186,6 +186,7 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
 </style>
 </head>
 <body>
+<script src="/webmcp.js"></script>
 
 <div class="sky" id="sky">
   <div class="wrap">
@@ -516,6 +517,105 @@ function away(){
 const saved=JSON.parse(localStorage.getItem("ilma")||"null");
 saved?load(saved.lat,saved.lon,saved.name,saved.sub):load(60.17523,24.94459,"Helsinki","Uusimaa, Suomi");
 evidence();
+
+/* ═══════════ WebMCP: the page as an MCP server ═══════════
+   Agents in the browser get tools no human-facing weather product serves:
+   calibrated probabilities from the verified error record, forecast churn
+   vs historical norms, decide-by curves, coherent model scenarios - and
+   show_me, which drives the visible page so agent and human always look at
+   the same thing. Fails closed: if webmcp.js is absent, the site is
+   unchanged. */
+(function initWebMCP(){
+  if(typeof WebMCP==="undefined")return;
+  let mcp;
+  try{mcp=new WebMCP({color:"#4E7F63",position:"bottom-right"});}catch(e){return}
+  const J=o=>({content:[{type:"text",text:JSON.stringify(o)}]});
+  const api=async p=>{const r=await fetch(p);if(!r.ok)throw new Error(await r.text());return r.json()};
+  async function place(q){
+    const d=await api(`/api/geocode?q=${encodeURIComponent(q)}`);
+    if(!d.results||!d.results.length)throw new Error("place not found: "+q);
+    const p=d.results[0];return {lat:p.lat,lon:p.lon,name:p.name,sub:[p.admin1,p.country].filter(Boolean).join(", ")};
+  }
+  const S={place:{type:"string"},start:{type:"string"},end:{type:"string"}};
+
+  mcp.registerTool("get_forecast",
+    "Blended multi-model forecast for any place. Every hour includes the blend AND the min-max range across models - treat a wide range as low confidence.",
+    {place:{type:"string"},hours:{type:"string"}},
+    async a=>{
+      const p=await place(a.place);
+      const d=await api(`/api/forecast?lat=${p.lat}&lon=${p.lon}`);
+      const n=Math.min(parseInt(a.hours||"48",10),168);
+      const hrs=d.hours.filter(h=>h.t2m).slice(0,n).map(h=>({
+        time:h.time,t2m:h.t2m.blend,t2m_range:[h.t2m.lo,h.t2m.hi],
+        rain_mm:h.rain1h?h.rain1h.blend:null,wind_ms:h.ws?h.ws.blend:null}));
+      return J({place:p.name+", "+p.sub,models:d.members.length,hours:hrs});
+    });
+
+  mcp.registerTool("get_probability",
+    "Calibrated P(temperature within [lo,hi] C) per hour, from 30+ days of verified errors conditioned on lead and live model disagreement. Times are local, format YYYY-MM-DDTHH:MM.",
+    {...S,lo:{type:"string"},hi:{type:"string"}},
+    async a=>{const p=await place(a.place);
+      return J(await api(`/api/agent/probability?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}&lo=${a.lo||-99}&hi=${a.hi||99}`))});
+
+  mcp.registerTool("get_rain_probability",
+    "Calibrated probability of measurable rain (>=0.1mm) per hour in a local-time window, from verified observed frequencies.",
+    S, async a=>{const p=await place(a.place);
+      return J(await api(`/api/agent/rain?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}`))});
+
+  mcp.registerTool("assess_plan",
+    "Decision support: P(conditions bad) for an outdoor plan with per-driver breakdown; pass cost_cancel and cost_ruined for an expected-value recommendation.",
+    {...S,rain_bad_mm:{type:"string"},wind_bad_ms:{type:"string"},tmin_ok:{type:"string"},tmax_ok:{type:"string"},cost_cancel:{type:"string"},cost_ruined:{type:"string"}},
+    async a=>{const p=await place(a.place);
+      const q=new URLSearchParams({lat:p.lat,lon:p.lon,start:a.start,end:a.end,
+        rain_bad_mm:a.rain_bad_mm||"0.5",wind_bad_ms:a.wind_bad_ms||"10",
+        tmin_ok:a.tmin_ok||"-99",tmax_ok:a.tmax_ok||"99",
+        cost_cancel:a.cost_cancel||"0",cost_ruined:a.cost_ruined||"0"});
+      return J(await api(`/api/agent/assess?${q}`))});
+
+  mcp.registerTool("get_stability",
+    "How much has the forecast for a date (YYYY-MM-DD) been changing between model runs, vs historical churn at this lead? Jumpy = decide later even if today's spread looks narrow. No other weather product exposes this.",
+    {place:{type:"string"},date:{type:"string"}},
+    async a=>{const p=await place(a.place);
+      return J(await api(`/api/agent/stability?lat=${p.lat}&lon=${p.lon}&date=${a.date}`))});
+
+  mcp.registerTool("when_to_decide",
+    "The verified error-vs-lead curve between now and event_date (YYYY-MM-DD): what waiting to decide actually buys in expected accuracy.",
+    {place:{type:"string"},event_date:{type:"string"}},
+    async a=>{const p=await place(a.place);
+      return J(await api(`/api/agent/decide_by?lat=${p.lat}&lon=${p.lon}&event_date=${a.event_date}`))});
+
+  mcp.registerTool("get_scenarios",
+    "Coherent per-model scenarios over a local-time window - each model is one physical world (the cold outcome is usually also the wet one). Plan branches, not averages.",
+    S, async a=>{const p=await place(a.place);
+      return J(await api(`/api/agent/scenarios?lat=${p.lat}&lon=${p.lon}&start=${a.start}&end=${a.end}`))});
+
+  mcp.registerTool("why_trust_this",
+    "The evidence: nightly-verified accuracy of this blend against Foreca, the Finnish Meteorological Institute, Google and every raw model - matched pairs, confidence intervals, p-values.",
+    {}, async()=>{
+      const d=await api("/api/stats");
+      const P=d.pairwise_blends||{};
+      const cells={};
+      for(const k of Object.keys(P)) if(k.startsWith("blend_open__vs__")){
+        const c=P[k].pooled_1_7; if(c)cells[k.replace("blend_open__vs__","vs_")]= {
+          mae_ours:c.mae_cand,mae_theirs:c.mae_comp,diff_degC:c.diff,ci95:c.ci95,p:c.p,
+          significant:c.significant,days:c.days,n_pairs:c.n};}
+      return J({verified_against_stations:"14 FMI stations, Finland",pooled_leads:"days 1-7",
+        results:cells,caveat:"one summer, Finland; not yet a claim about winter or other countries"});
+    });
+
+  mcp.registerTool("best_source",
+    "Which forecast source is measurably best at each lead day in a country (fi/se/dk/de/us), per the verified record.",
+    {country:{type:"string"},var:{type:"string"}},
+    async a=>J(await api(`/api/agent/best_source?country=${a.country||"fi"}&var=${a.var||"t2m"}`)));
+
+  mcp.registerTool("show_me",
+    "Drive the visible page: load a place so the human sees exactly what you are reasoning about. Always call this when discussing a specific place with the user.",
+    {place:{type:"string"}},
+    async a=>{const p=await place(a.place);
+      load(p.lat,p.lon,p.name,p.sub);
+      document.querySelector("#chart").scrollIntoView({behavior:"smooth",block:"center"});
+      return J({shown:p.name+", "+p.sub,note:"page now displays this location"});});
+})();
 </script>
 </body>
 </html>

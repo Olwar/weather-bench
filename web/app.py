@@ -241,9 +241,306 @@ def health():
     return {"ok": True, "stats": (DATA_DIR / "prospective_results.json").exists()}
 
 
+@app.get("/webmcp.js")
+def webmcp_js():
+    return FileResponse(STATIC / "webmcp.js", media_type="application/javascript")
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Agent-facing endpoints (WebMCP tools call these). They serve what a human
+# cannot read but an agent can compute with: calibrated probabilities from
+# the verified error record, forecast churn vs historical norms, error-vs-
+# lead curves, and coherent member scenarios. Nightly inputs come from
+# agent_stats.py; live members come from the same build_forecast the page
+# uses, so the agent and the human always reason about identical data.
+# ════════════════════════════════════════════════════════════════════════
+import math
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
+from common import CITIES, DB_PATH
+
+_ASTATS = {"mtime": 0, "data": None}
+
+
+def _astats():
+    f = DATA_DIR / "agent_stats.json"
+    m = f.stat().st_mtime
+    if m != _ASTATS["mtime"]:
+        _ASTATS.update(mtime=m, data=json.loads(f.read_text()))
+    return _ASTATS["data"]
+
+
+def _results():
+    return json.loads((DATA_DIR / "prospective_results.json").read_text())
+
+
+def _nearest_city(lat, lon):
+    best = min(CITIES, key=lambda c: (c["lat"] - lat) ** 2
+               + ((c["lon"] - lon) * math.cos(math.radians(lat))) ** 2)
+    km = 111.0 * math.sqrt((best["lat"] - lat) ** 2
+                           + ((best["lon"] - lon) * math.cos(math.radians(lat))) ** 2)
+    return best, round(km)
+
+
+def _hours_window(lat, lon, start, end):
+    fc = _cached(("fc", round(lat, 2), round(lon, 2)),
+                 lambda: build_forecast(round(lat, 4), round(lon, 4)))
+    off = fc.get("utc_offset_seconds", 0)
+    out = []
+    for h in fc["hours"]:
+        if start <= h["time"] <= end and "t2m" in h:
+            utc = datetime.strptime(h["time"], "%Y-%m-%dT%H:%M") - timedelta(seconds=off)
+            lead = int((utc.replace(tzinfo=timezone.utc)
+                        - datetime.now(timezone.utc)).total_seconds() // 86400)
+            out.append((h, max(0, lead)))
+    return fc, out
+
+
+def _sb(sd):
+    e = _astats()["spread_edges"]
+    return 0 if sd < e[0] else (1 if sd < e[1] else 2)
+
+
+def _t2m_cdf(lead, sb, x):
+    """P(error <= x) by linear interpolation over the empirical quantiles;
+    falls back toward lower leads when a cell is thin."""
+    q = _astats()["t2m_error_quantiles"]
+    cell = None
+    for l in range(min(lead, 9), -1, -1):
+        cell = q.get(f"{l},{sb}") or cell
+        if cell:
+            break
+    if not cell:
+        return None
+    pts = [(0.05, cell["q5"]), (0.10, cell["q10"]), (0.25, cell["q25"]),
+           (0.50, cell["q50"]), (0.75, cell["q75"]), (0.90, cell["q90"]),
+           (0.95, cell["q95"])]
+    if x <= pts[0][1]:
+        return 0.05
+    if x >= pts[-1][1]:
+        return 0.95
+    for (p1, v1), (p2, v2) in zip(pts, pts[1:]):
+        if v1 <= x <= v2:
+            return p1 + (p2 - p1) * ((x - v1) / (v2 - v1) if v2 > v1 else 0)
+    return 0.5
+
+
+def _rain_p(lead, mm):
+    cal = _astats()["rain_calibration"]
+    for bi, (lo, hi) in enumerate(_astats()["rain_buckets"]):
+        if lo <= mm < hi:
+            for l in range(min(lead, 9), -1, -1):
+                c = cal.get(f"{l},{bi}")
+                if c:
+                    return c["p_wet"]
+    return None
+
+
+@app.get("/api/agent/probability")
+def agent_probability(lat: float, lon: float, start: str, end: str,
+                      lo: float = -99, hi: float = 99):
+    """P(lo <= t2m <= hi) per hour, from the verified error distribution
+    conditioned on lead and live member spread."""
+    _, hours = _hours_window(lat, lon, start, end)
+    if not hours:
+        raise HTTPException(404, "no forecast hours in window")
+    per = []
+    for h, lead in hours:
+        m = list(h["t2m"]["members"].values())
+        sb = _sb((sum((x - sum(m) / len(m)) ** 2 for x in m) / len(m)) ** 0.5)
+        blend = h["t2m"]["blend"]
+        c_hi = _t2m_cdf(lead, sb, hi - blend)
+        c_lo = _t2m_cdf(lead, sb, lo - blend)
+        if c_hi is None:
+            continue
+        per.append({"time": h["time"], "blend": round(blend, 1),
+                    "p_in_range": round(max(0.0, c_hi - c_lo), 2)})
+    ps = [x["p_in_range"] for x in per]
+    return {"hours": per, "p_all_hours_min": min(ps), "p_mean": round(sum(ps) / len(ps), 2),
+            "basis": f"calibrated on {_astats()['generated']} verified record",
+            "note": "probabilities from empirical error quantiles conditioned on lead day and live model spread"}
+
+
+@app.get("/api/agent/rain")
+def agent_rain(lat: float, lon: float, start: str, end: str):
+    """Calibrated P(measurable rain >= 0.1 mm) per hour + window summary."""
+    _, hours = _hours_window(lat, lon, start, end)
+    per, p_dry = [], 1.0
+    for h, lead in hours:
+        mm = h.get("rain1h", {}).get("blend", 0.0)
+        p = _rain_p(lead, mm)
+        if p is None:
+            continue
+        per.append({"time": h["time"], "forecast_mm": round(mm, 2), "p_rain": p})
+        p_dry *= (1 - p)
+    if not per:
+        raise HTTPException(404, "no rain-calibrated hours in window")
+    return {"hours": per, "p_any_rain_upper": round(1 - p_dry, 2),
+            "p_rain_max_hour": max(x["p_rain"] for x in per),
+            "note": "per-hour probabilities are calibrated frequencies from the verified record; "
+                    "the any-rain figure assumes hour independence and is an upper bound"}
+
+
+@app.get("/api/agent/stability")
+def agent_stability(lat: float, lon: float, date: str):
+    """How much has the forecast for this date been churning between runs,
+    vs historical churn at this lead? Only benchmark cities carry run
+    history; the nearest one answers, distance disclosed."""
+    city, km = _nearest_city(lat, lon)
+    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    rows = con.execute(
+        "SELECT run_time, value FROM forecasts WHERE source='ecmwf_aifs025_single'"
+        " AND city=? AND var='t2m' AND target_time LIKE ?",
+        (city["key"], f"{date}%")).fetchall()
+    con.close()
+    runs = {}
+    for rt, v in rows:
+        runs.setdefault(rt, []).append(v)
+    means = sorted((rt, sum(v) / len(v)) for rt, v in runs.items() if len(v) >= 12)[-10:]
+    if len(means) < 4:
+        raise HTTPException(404, "not enough run history for this date")
+    vals = [m for _, m in means]
+    mu = sum(vals) / len(vals)
+    churn = (sum((x - mu) ** 2 for x in vals) / len(vals)) ** 0.5
+    lead = max(0, (datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                   - datetime.now(timezone.utc)).days)
+    norm = _astats()["churn_norms"].get(str(min(lead, 9)), {})
+    verdict = ("stable" if churn <= norm.get("p50", 99) else
+               "typical churn" if churn <= norm.get("p80", 99) else
+               "unusually jumpy - low confidence, consider deciding later")
+    return {"station_city": city["key"], "station_distance_km": km,
+            "runs_considered": len(means), "daily_mean_by_run":
+                [{"run": rt, "t2m_mean": round(m, 1)} for rt, m in means],
+            "churn_stddev": round(churn, 2), "historical_norm": norm, "verdict": verdict}
+
+
+@app.get("/api/agent/decide_by")
+def agent_decide_by(lat: float, lon: float, event_date: str):
+    """The error-vs-lead curve between now and the event: what waiting buys."""
+    city, km = _nearest_city(lat, lon)
+    r = _results()
+    cc = next(c["country"] for c in CITIES if c["key"] == city["key"])
+    boards = r["countries"].get(cc, {}) if cc != "fi" else r
+    t2m = boards.get("hourly_t2m", {}).get("blend_open", {})
+    rain = boards.get("rain_occurrence", {}).get("blend_open", {})
+    lead = max(0, (datetime.strptime(event_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                   - datetime.now(timezone.utc)).days)
+    curve = []
+    for l in range(lead, -1, -1):
+        c = t2m.get(str(l))
+        if c:
+            curve.append({"decide_days_before": l,
+                          "expected_t2m_mae": c["mae"],
+                          "rain_csi": rain.get(str(l), {}).get("csi")})
+    if not curve:
+        raise HTTPException(404, f"no verified lead curve for country {cc} yet")
+    return {"country": cc, "verified_at_km": km, "curve": curve,
+            "note": "MAE from the nightly-verified record; waiting reduces expected error by the difference between rows"}
+
+
+@app.get("/api/agent/scenarios")
+def agent_scenarios(lat: float, lon: float, start: str, end: str):
+    """Coherent per-model scenarios over the window - members are physical
+    worlds, so the cold outcome is usually also the wet, windy one."""
+    _, hours = _hours_window(lat, lon, start, end)
+    if not hours:
+        raise HTTPException(404, "no forecast hours in window")
+    per = {}
+    for h, _ in hours:
+        for name, v in h["t2m"]["members"].items():
+            d = per.setdefault(name, {"t": [], "r": 0.0, "w": []})
+            d["t"].append(v)
+        for name, v in h.get("rain1h", {}).get("members", {}).items():
+            per.setdefault(name, {"t": [], "r": 0.0, "w": []})["r"] += v
+        for name, v in h.get("ws", {}).get("members", {}).items():
+            per.setdefault(name, {"t": [], "r": 0.0, "w": []})["w"].append(v)
+    scen = []
+    for name, d in per.items():
+        if not d["t"]:
+            continue
+        scen.append({"model": name, "t2m_mean": round(sum(d["t"]) / len(d["t"]), 1),
+                     "rain_total_mm": round(d["r"], 1),
+                     "wind_max_ms": round(max(d["w"]), 1) if d["w"] else None})
+    dry = [s for s in scen if s["rain_total_mm"] < 0.5]
+    wet = [s for s in scen if s["rain_total_mm"] >= 0.5]
+    return {"scenarios": sorted(scen, key=lambda s: s["rain_total_mm"]),
+            "dry_share": round(len(dry) / len(scen), 2) if scen else None,
+            "groups": {"dry": [s["model"] for s in dry], "wet": [s["model"] for s in wet]},
+            "note": "each row is one model's coherent trajectory over the window, not an independent statistic"}
+
+
+@app.get("/api/agent/best_source")
+def agent_best_source(country: str = "fi", var: str = "t2m"):
+    """Who is measurably best at each lead, in this country, per the record."""
+    r = _results()
+    boards = r if country == "fi" else r.get("countries", {}).get(country)
+    if not boards:
+        raise HTTPException(404, f"no verified record for {country}")
+    key = {"t2m": "hourly_t2m", "ws": "hourly_ws", "cc": "hourly_cc",
+           "rain": "rain_occurrence"}.get(var)
+    board = boards.get(key, {})
+    higher = var == "rain"
+    metric = "csi" if higher else "mae"
+    out = {}
+    for lead in range(0, 10):
+        cells = [(s, b[str(lead)][metric]) for s, b in board.items()
+                 if b.get(str(lead)) and b[str(lead)].get(metric) is not None
+                 and (s == "blend_open" or not s.startswith("blend_"))]
+        if cells:
+            cells.sort(key=lambda x: x[1], reverse=higher)
+            out[str(lead)] = [{"source": s, metric: v} for s, v in cells[:3]]
+    return {"country": country, "var": var, "best_by_lead": out}
+
+
+@app.get("/api/agent/assess")
+def agent_assess(lat: float, lon: float, start: str, end: str,
+                 rain_bad_mm: float = 0.5, wind_bad_ms: float = 10.0,
+                 tmin_ok: float = -99, tmax_ok: float = 99,
+                 cost_cancel: float = 0, cost_ruined: float = 0):
+    """The decision endpoint: P(conditions bad) with per-driver breakdown,
+    and expected-value advice when the caller supplies stakes."""
+    _, hours = _hours_window(lat, lon, start, end)
+    if not hours:
+        raise HTTPException(404, "no forecast hours in window")
+    p_dry, wind_exceed, temp_probs = 1.0, [], []
+    for h, lead in hours:
+        mm = h.get("rain1h", {}).get("blend", 0.0)
+        p = _rain_p(lead, mm) if mm >= 0.05 else (_rain_p(lead, mm) or 0.02)
+        p_dry *= (1 - min(p or 0.02, 0.95)) if rain_bad_mm <= 0.5 else \
+                 (1 - min((p or 0.02) * min(1.0, mm / rain_bad_mm), 0.95))
+        ws = h.get("ws", {})
+        if ws:
+            mem = list(ws["members"].values())
+            wind_exceed.append(sum(1 for x in mem if x >= wind_bad_ms) / len(mem))
+        m = list(h["t2m"]["members"].values())
+        sb = _sb((sum((x - sum(m) / len(m)) ** 2 for x in m) / len(m)) ** 0.5)
+        blend = h["t2m"]["blend"]
+        c_hi = _t2m_cdf(lead, sb, tmax_ok - blend)
+        c_lo = _t2m_cdf(lead, sb, tmin_ok - blend)
+        if c_hi is not None:
+            temp_probs.append(max(0.0, c_hi - c_lo))
+    p_rain_bad = round(1 - p_dry, 2)
+    p_wind_bad = round(max(wind_exceed), 2) if wind_exceed else 0.0
+    p_temp_ok = round(min(temp_probs), 2) if temp_probs else 1.0
+    p_bad = round(min(0.97, 1 - (1 - p_rain_bad) * (1 - p_wind_bad) * p_temp_ok), 2)
+    out = {"p_bad": p_bad,
+           "drivers": {"p_rain_bad": p_rain_bad, "p_wind_bad_any_hour": p_wind_bad,
+                       "p_temp_in_ok_range_worst_hour": p_temp_ok},
+           "calibration": {"rain": "verified frequencies", "temp": "verified quantiles",
+                           "wind": "raw member exceedance (not yet calibrated)"}}
+    if cost_cancel > 0 and cost_ruined > 0:
+        ev_go = p_bad * cost_ruined
+        out["decision"] = {"recommend": "cancel" if cost_cancel < ev_go else "go",
+                           "expected_loss_if_go": round(ev_go),
+                           "cost_if_cancel": cost_cancel,
+                           "flips_if_p_bad_crosses": round(cost_cancel / cost_ruined, 2)}
+    return out

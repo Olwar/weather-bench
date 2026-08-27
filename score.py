@@ -240,6 +240,11 @@ def daily_series(con):
     hr_r: dict = defaultdict(list)
     q = "SELECT source, city, run_time, target_time, var, value FROM forecasts WHERE var IN ('t2m','rain1h')"
     for source, city, run_time, target_time, var, value in con.execute(q):
+        # Daily boards are Finland-only; accumulating the other 18 cities here
+        # built ~1 GB of dicts that scoring then ignored - it is what pushed
+        # the nightly run into the 2 GB MemoryMax and got it OOM-killed.
+        if city not in FI_CITIES:
+            continue
         # Feeds include already-elapsed hours of the snapshot day (analysis, not
         # forecast) - grading on them would be hindsight. Mirror hourly_board's filter.
         if _utc(target_time) < _utc(run_time):

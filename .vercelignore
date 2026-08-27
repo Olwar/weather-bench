@@ -4,6 +4,7 @@
 # gets stripped (it did).
 *
 !vercel.json
+!webmcp.js
 !web
 web/*
 !web/static
