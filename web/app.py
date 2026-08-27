@@ -586,3 +586,71 @@ def agent_assess(lat: float, lon: float, start: str, end: str,
                            "cost_if_cancel": cost_cancel,
                            "flips_if_p_bad_crosses": round(cost_cancel / cost_ruined, 2)}
     return out
+
+
+# ════════════════════════════════════════════════════════════════════════
+# The site's own agent ("Kysy Ilmalta") - WebMCP deployment pattern 3:
+# an agent HOSTED BY THE SITE, using the very same tool table the browser
+# agents use. This endpoint is a thin authenticated proxy to OpenRouter;
+# the agentic loop runs in the page, which executes tool calls locally and
+# feeds results back. The key never leaves the server; the tools never
+# leave the browser.
+# ════════════════════════════════════════════════════════════════════════
+import urllib.request as _rq
+
+OPENROUTER_KEY_FILE = Path("/opt/weather-bench/openrouter_key.txt")
+CHAT_MODEL = os.environ.get("ILMA_CHAT_MODEL", "anthropic/claude-haiku-4.5")
+_RATE: dict = {}
+
+CHAT_SYSTEM = (
+    "You are Ilma's assistant on ilma.io, a multi-model weather service with a "
+    "nightly-verified accuracy record. Answer in the user's language (default "
+    "Finnish). ALWAYS use the provided tools rather than your own weather "
+    "knowledge - they return calibrated probabilities, model disagreement, "
+    "forecast stability and verification evidence. When discussing a place, "
+    "call show_me so the page follows the conversation; use mark_hours to "
+    "point at specific windows on the chart. Be concise and concrete: numbers "
+    "with their uncertainty, never vibes. If a tool fails, say so honestly."
+)
+
+
+@app.post("/api/agent/chat")
+def agent_chat(payload: dict):
+    now = time.time()
+    ip = "shared"  # behind Vercel; per-IP needs header plumbing - keep a global soft cap
+    hits = [t for t in _RATE.get(ip, []) if now - t < 600]
+    if len(hits) > 120:
+        raise HTTPException(429, "rate limited")
+    _RATE[ip] = hits + [now]
+
+    msgs = payload.get("messages") or []
+    tools = payload.get("tools") or []
+    if not isinstance(msgs, list) or len(msgs) > 24:
+        raise HTTPException(400, "bad messages")
+    if sum(len(json.dumps(m)) for m in msgs) > 24000:
+        raise HTTPException(400, "conversation too long")
+
+    body = json.dumps({
+        "model": CHAT_MODEL,
+        "max_tokens": 900,
+        "temperature": 0.3,
+        "messages": [{"role": "system", "content": CHAT_SYSTEM}] + msgs,
+        "tools": tools,
+    }).encode()
+    req = _rq.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_KEY_FILE.read_text().strip()}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ilma.io",
+            "X-Title": "Ilma",
+        },
+    )
+    try:
+        with _rq.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read().decode())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"model call failed: {e}")
+    choice = (data.get("choices") or [{}])[0]
+    return {"message": choice.get("message"), "finish_reason": choice.get("finish_reason")}

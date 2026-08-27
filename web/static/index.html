@@ -200,6 +200,32 @@ svg{display:block;width:100%;overflow:visible}
 .plan .who{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px}
 .plan li{margin:6px 0 6px 18px;font-size:15px;outline:none}
 .plan li:focus{background:var(--paper)}
+/* Kysy Ilmalta - the site's own agent (WebMCP pattern 3) */
+.ai-fab{position:fixed;left:22px;bottom:22px;z-index:80;background:var(--ink);color:var(--paper);
+  border:0;border-radius:99px;padding:12px 20px;font-family:var(--display);font-style:italic;
+  font-size:16px;cursor:pointer;box-shadow:0 12px 30px -8px rgba(24,21,19,.45);transition:transform .2s}
+.ai-fab:hover{transform:translateY(-2px)}
+.ai-panel{position:fixed;left:22px;bottom:22px;z-index:90;width:min(400px,calc(100vw - 44px));
+  max-height:min(560px,calc(100vh - 60px));display:none;flex-direction:column;background:var(--paper);
+  border:1px solid var(--rule);border-radius:18px;overflow:hidden;
+  box-shadow:0 30px 70px -20px rgba(24,21,19,.5)}
+.ai-panel.on{display:flex}
+.ai-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+  background:var(--ink);color:var(--paper)}
+.ai-head b{font-family:var(--display);font-style:italic;font-weight:400;font-size:18px}
+.ai-head button{background:none;border:0;color:var(--paper);font-size:18px;cursor:pointer;opacity:.7}
+.ai-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.ai-m{max-width:88%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.5;white-space:pre-wrap}
+.ai-m.u{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:4px}
+.ai-m.a{align-self:flex-start;background:var(--paper-2);border-bottom-left-radius:4px}
+.ai-m.t{align-self:flex-start;font-size:12px;color:var(--ink-3);font-family:var(--display);
+  font-style:italic;padding:0 4px}
+.ai-in{display:flex;gap:8px;padding:12px;border-top:1px solid var(--rule)}
+.ai-in input{flex:1;border:1px solid var(--rule);border-radius:99px;padding:10px 16px;
+  font-family:var(--body);font-size:14.5px;outline:none;background:var(--paper)}
+.ai-in input:focus{border-color:var(--ink-2)}
+.ai-in button{background:var(--accent);color:#fff;border:0;border-radius:99px;padding:0 18px;
+  font-size:14.5px;cursor:pointer}
 footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
 .load{color:var(--ink-3);font-style:italic;padding:16px 0}
 .bad{color:var(--warm);padding:16px 0}
@@ -272,6 +298,16 @@ footer{padding:34px 0 48px;font-size:13px;color:var(--ink-3);line-height:1.9}
   </summary>
   <div class="inner" id="trustbody"><div class="load">loading…</div></div>
 </details>
+
+<button class="ai-fab" id="aiFab">Kysy Ilmalta ✳</button>
+<div class="ai-panel" id="aiPanel">
+  <div class="ai-head"><b>Kysy Ilmalta</b><button id="aiClose">×</button></div>
+  <div class="ai-msgs" id="aiMsgs">
+    <div class="ai-m a">Hei! Olen Ilman oma agentti — käytän täsmälleen samoja työkaluja kuin selainagentit. Kysy vaikka: ”Sopiiko lauantai-ilta grillaamiseen?”</div>
+  </div>
+  <div class="ai-in"><input id="aiInput" placeholder="Kysy säästä…" autocomplete="off">
+    <button id="aiSend">Kysy</button></div>
+</div>
 
 <footer>
   <div><span id="footerTxt">Ilma averages six forecast models — ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute and Open-Meteo — and verifies the result against 14 Finnish weather stations.</span> <span id="gen"></span></div>
@@ -866,6 +902,9 @@ evidence();
      return {shown:p.name+", "+p.sub,note:"page now displays this location"};}}
   ];
 
+  // Surface 3: the site's own agent reads the same table (see initIlmaChat)
+  window._ilmaTools=TOOLS;
+
   // Surface 1: the open standard (ChatGPT in-app browser, Chrome origin trial)
   const ctx=document.modelContext||navigator.modelContext||window.modelContext;
   if(ctx&&ctx.registerTool){
@@ -897,6 +936,53 @@ evidence();
       }
     }catch(e){}
   }
+})();
+
+/* ═══ Kysy Ilmalta: the on-site agent. The loop runs HERE in the page;
+   the backend only relays to the model. Tool calls execute against the
+   same TOOLS table the browser agents use - three doorways, one toolset. */
+(function initIlmaChat(){
+  const $=s=>document.querySelector(s);
+  const fab=$("#aiFab"),panel=$("#aiPanel"),msgsEl=$("#aiMsgs"),inp=$("#aiInput");
+  fab.onclick=()=>{panel.classList.add("on");fab.style.display="none";inp.focus()};
+  $("#aiClose").onclick=()=>{panel.classList.remove("on");fab.style.display=""};
+  const hist=[];
+  const oaTools=()=> (window._ilmaTools||[]).map(t=>({type:"function",
+    function:{name:t.name,description:t.description,parameters:t.schema}}));
+  function bubble(cls,text){const d=document.createElement("div");d.className="ai-m "+cls;
+    d.textContent=text;msgsEl.appendChild(d);msgsEl.scrollTop=msgsEl.scrollHeight;return d}
+  async function send(){
+    const q=inp.value.trim();if(!q)return;
+    inp.value="";bubble("u",q);
+    hist.push({role:"user",content:q+`\n[context: today is ${new Date().toISOString().slice(0,10)}, page shows ${document.querySelector("#city").textContent}]`});
+    const thinking=bubble("a","…");
+    try{
+      for(let round=0;round<6;round++){
+        const r=await fetch("/api/agent/chat",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({messages:hist,tools:oaTools()})});
+        if(!r.ok)throw new Error(await r.text());
+        const {message}=await r.json();
+        hist.push(message);
+        if(message.tool_calls&&message.tool_calls.length){
+          for(const tc of message.tool_calls){
+            const tool=(window._ilmaTools||[]).find(t=>t.name===tc.function.name);
+            bubble("t","✳ "+tc.function.name);
+            let out;
+            try{out=await tool.handler(JSON.parse(tc.function.arguments||"{}"));}
+            catch(e){out={error:String(e.message||e)}}
+            hist.push({role:"tool",tool_call_id:tc.id,content:JSON.stringify(out).slice(0,12000)});
+          }
+          continue;
+        }
+        thinking.textContent=message.content||"(ei vastausta)";
+        return;
+      }
+      thinking.textContent="(liikaa työkalukierroksia — yritä tarkentaa kysymystä)";
+    }catch(e){thinking.textContent="Virhe: "+String(e.message||e).slice(0,160)}
+  }
+  $("#aiSend").onclick=send;
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")send()});
 })();
 </script>
 </body>
