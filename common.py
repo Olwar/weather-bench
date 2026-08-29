@@ -85,12 +85,12 @@ OM_MODELS = [
 UA = "weather-bench/0.1 (+http://89.167.5.149:8080; forecast verification research)"
 
 
-def http_get(url: str, tries: int = 3, sleep: float = 2.0) -> str:
+def http_get(url: str, tries: int = 3, sleep: float = 2.0, timeout: float = 60) -> str:
     last = None
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.read().decode("utf-8")
         except Exception as e:  # noqa: BLE001 - retry any transport error
             last = e
@@ -98,11 +98,11 @@ def http_get(url: str, tries: int = 3, sleep: float = 2.0) -> str:
     raise RuntimeError(f"GET failed after {tries} tries: {url}") from last
 
 
-def http_json(url: str, tries: int = 3, sleep: float = 2.0) -> dict:
-    return json.loads(http_get(url, tries=tries, sleep=sleep))
+def http_json(url: str, tries: int = 3, sleep: float = 2.0, timeout: float = 60) -> dict:
+    return json.loads(http_get(url, tries=tries, sleep=sleep, timeout=timeout))
 
 
-def fmi_simple(storedquery: str, expect_pos=None, **params) -> list[tuple[str, str, float]]:
+def fmi_simple(storedquery: str, expect_pos=None, _tries: int = 3, _timeout: float = 60, **params) -> list[tuple[str, str, float]]:
     """Query an FMI WFS ::simple stored query. Returns [(utc_iso, param_name, value)].
 
     expect_pos=(lat, lon): assert the responding station is the pinned one -
@@ -114,7 +114,7 @@ def fmi_simple(storedquery: str, expect_pos=None, **params) -> list[tuple[str, s
         "https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature"
         f"&storedquery_id={storedquery}&{qs}"
     )
-    xml = http_get(url)
+    xml = http_get(url, tries=_tries, timeout=_timeout)
     ns = {
         "BsWfs": "http://xml.fmi.fi/schema/wfs/2.0",
         "gml": "http://www.opengis.net/gml/3.2",

@@ -54,19 +54,40 @@ MEMBER_LABELS = {
     "fmi_edited": "FMI (edited)",
 }
 
-CACHE_TTL = 900        # 15 min: Open-Meteo is free, so do not hammer it
+CACHE_TTL = 900        # 15 min freshness: Open-Meteo is free, do not hammer it
+STALE_OK = 3 * 3600    # ...but an expired entry is still a fine thing to SHOW
 _cache: dict = {}
+_refreshing: set = set()
 
 app = FastAPI(title="weather-bench", docs_url=None, redoc_url=None)
 
 
 def _cached(key, fn):
+    """Stale-while-revalidate: a fresh hit returns at once; an expired-but-
+    recent hit ALSO returns at once and refreshes in a background thread -
+    only a location nobody has viewed for hours makes a visitor wait on
+    upstream weather services. That wait was 12+ s and looked like the site
+    being broken."""
+    import threading
     hit = _cache.get(key)
-    if hit and time.time() - hit[0] < CACHE_TTL:
+    age = time.time() - hit[0] if hit else None
+    if hit and age < CACHE_TTL:
+        return hit[1]
+    if hit and age < STALE_OK:
+        if key not in _refreshing:
+            _refreshing.add(key)
+            def _bg():
+                try:
+                    _cache[key] = (time.time(), fn())
+                except Exception:
+                    pass
+                finally:
+                    _refreshing.discard(key)
+            threading.Thread(target=_bg, daemon=True).start()
         return hit[1]
     val = fn()
     _cache[key] = (time.time(), val)
-    if len(_cache) > 500:                      # crude bound, this is a small site
+    if len(_cache) > 500:
         for k in sorted(_cache, key=lambda k: _cache[k][0])[:200]:
             _cache.pop(k, None)
     return val
@@ -79,7 +100,8 @@ def _fetch_om_models(lat, lon):
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
         f"&hourly={','.join(OM_ALL)}&wind_speed_unit=ms&timezone=auto"
-        f"&models={','.join(OM_MODELS)}&forecast_days=14"
+        f"&models={','.join(OM_MODELS)}&forecast_days=14",
+        tries=2, timeout=20,
     )
     blocks = data if isinstance(data, list) else [data]
     out, meta = {}, {}
@@ -107,7 +129,8 @@ def _fetch_om_ensemble(lat, lon):
         "https://ensemble-api.open-meteo.com/v1/ensemble"
         f"?latitude={lat}&longitude={lon}"
         f"&hourly={','.join(OM_VARS)}&wind_speed_unit=ms&timezone=auto"
-        f"&models={AIFS_ENS_MODEL}&forecast_days=14"
+        f"&models={AIFS_ENS_MODEL}&forecast_days=14",
+        tries=1, timeout=12,
     )
     blocks = data if isinstance(data, list) else [data]
     out = {}
@@ -133,6 +156,7 @@ def _fetch_fmi(lat, lon, utc_offset):
     now = datetime.now(tz.utc)
     rows = fmi_simple(
         "fmi::forecast::edited::weather::scandinavia::point::simple",
+        _tries=1, _timeout=10,
         latlon=f"{lat},{lon}", parameters=",".join(FMI_FC_PARAMS), timestep=60,
         starttime=now.strftime("%Y-%m-%dT%H:00:00Z"),
         endtime=(now + timedelta(days=10)).strftime("%Y-%m-%dT%H:00:00Z"),
