@@ -252,6 +252,8 @@ def stats():
         "hourly_t2m": d.get("hourly_t2m", {}),
         "hourly_ws": d.get("hourly_ws", {}),
         "rain_occurrence": d.get("rain_occurrence", {}),
+        "hourly_rain_amount": d.get("hourly_rain_amount", {}),
+        "scopes": d.get("scopes", {}),
         "pairwise_blends": d.get("pairwise_t2m_blends_exploratory", {}),
         "pairwise_prereg": d.get("pairwise_t2m", {}),
         "config": d.get("config", {}),

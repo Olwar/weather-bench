@@ -186,6 +186,11 @@ svg{display:block;width:100%;overflow:visible}
 .tbl tr.us td{color:var(--paper)}
 .tbl tr.us td:first-child{font-weight:600}
 .tbl td.b{color:#E8B98A}
+.scope{display:inline-flex;border:1px solid rgba(250,246,239,.22);border-radius:99px;overflow:hidden;margin-top:20px}
+.scope button{background:none;border:0;cursor:pointer;font-family:var(--body);font-size:12.5px;
+  letter-spacing:.06em;padding:6px 14px;color:var(--paper);opacity:.55;transition:background .2s,opacity .2s}
+.scope button.on{background:rgba(250,246,239,.14);opacity:1;font-weight:700}
+.scopenote{margin-top:14px;font-size:12.5px;color:rgba(250,246,239,.45);line-height:1.7;max-width:70ch}
 .fine{margin-top:18px;font-size:13px;color:rgba(250,246,239,.48);line-height:1.75;max-width:70ch}
 .fine b{color:#E8B98A;font-weight:400;font-style:italic;font-family:var(--display)}
 .away{border-left:2px solid #E8B98A;padding:2px 0 2px 16px;margin-top:20px;
@@ -348,6 +353,11 @@ en:{
   h4t2m:"Temperature mean error, °C — lower is better",
   h4ws:"Wind mean error, m/s — lower is better",
   h4rain:"Rain hit rate (CSI) — higher is better",
+  h4amt:"Rain amount mean error, mm/h — lower is better",
+  scopeFi:"Finland", scopeRest:"Rest of world", scopeAll:"All",
+  scopeNote:`Outside Finland the comparison is exploratory: different station networks and
+    competitors, history only since 26 Aug 2026, and no statistical testing. The headline
+    claims above are Finland-only.`,
   fine:(days,n,list)=>`Measured over ${days} days and ${n} hourly comparison pairs at
     14 Finnish weather stations, 1–7 days ahead. Lower mean error than ${list} — every difference
     is statistically significant after multiple-comparison correction.`,
@@ -358,7 +368,7 @@ en:{
   away:(city,n)=>`<b>${city} is outside the measured region.</b>
     The blend works the same way everywhere, but its accuracy is verified only in Finland —
     and here it uses ${n} models instead of six.`,
-  nice:{blend_open:"Ilma (this blend)",google_weather:"Google (WeatherNext)",yr:"Yr (Norway)",smhi:"SMHI (Sweden)",dwd:"DWD (Germany)",nws:"NWS (USA)",blend_open_yr:"Blend + Yr",blend_mean:"Blend + Foreca",blend_learned:"Weighted blend",blend_ai:"AI-model blend",
+  nice:{blend_open:"Ilma",google_weather:"Google (WeatherNext)",yr:"Yr (Norway)",smhi:"SMHI (Sweden)",dwd:"DWD (Germany)",nws:"NWS (USA)",blend_open_yr:"Blend + Yr",blend_mean:"Blend + Foreca",blend_learned:"Weighted blend",blend_ai:"AI-model blend",
     fmi_edited:"FMI (Finland)",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
     ecmwf_aifs_ens_mean:"AIFS ensemble",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
     metno_nordic:"MET Nordic"},
@@ -389,6 +399,11 @@ fi:{
   h4t2m:"Lämpötilan keskivirhe, °C — pienempi on parempi",
   h4ws:"Tuulen keskivirhe, m/s — pienempi on parempi",
   h4rain:"Sateen osuvuus (CSI) — suurempi on parempi",
+  h4amt:"Sademäärän keskivirhe, mm/h — pienempi on parempi",
+  scopeFi:"Suomi", scopeRest:"Muut maat", scopeAll:"Kaikki",
+  scopeNote:`Suomen ulkopuolella vertailu on kokeellinen: eri asemaverkot ja kilpailijat,
+    historiaa vasta 26.8.2026 alkaen, eikä tilastollista testausta. Yllä olevat väitteet
+    koskevat vain Suomea.`,
   fine:(days,n,list)=>`Mitattu ${days} päivän ja ${n} tunneittaisen vertailuparin yli
     14 suomalaisella sääasemalla, 1–7 päivää eteenpäin. Pienempi keskivirhe kuin ${list} — jokainen ero
     on tilastollisesti merkitsevä monivertailukorjauksen jälkeen.`,
@@ -399,7 +414,7 @@ fi:{
   away:(city,n)=>`<b>${city} on mitatun alueen ulkopuolella.</b>
     Yhdistelmä toimii samalla tavalla kaikkialla, mutta sen tarkkuus on todennettu vain Suomessa —
     ja täällä se käyttää ${n} mallia kuuden sijaan.`,
-  nice:{blend_open:"Ilma (tämä yhdistelmä)",google_weather:"Google (WeatherNext)",yr:"Yr (Norja)",smhi:"SMHI (Ruotsi)",dwd:"DWD (Saksa)",nws:"NWS (USA)",blend_open_yr:"Yhdistelmä + Yr",blend_mean:"Yhdistelmä + Foreca",blend_learned:"Painotettu yhdistelmä",blend_ai:"Tekoälymallien yhdistelmä",
+  nice:{blend_open:"Ilma",google_weather:"Google (WeatherNext)",yr:"Yr (Norja)",smhi:"SMHI (Ruotsi)",dwd:"DWD (Saksa)",nws:"NWS (USA)",blend_open_yr:"Yhdistelmä + Yr",blend_mean:"Yhdistelmä + Foreca",blend_learned:"Painotettu yhdistelmä",blend_ai:"Tekoälymallien yhdistelmä",
     fmi_edited:"Ilmatieteen laitos",foreca:"Foreca",ecmwf_aifs025_single:"ECMWF AIFS",
     ecmwf_aifs_ens_mean:"AIFS-parvi",ecmwf_ifs025:"ECMWF IFS",best_match:"Open-Meteo",
     metno_nordic:"MET Nordic"},
@@ -705,16 +720,35 @@ async function evidence(){
           return `<td class="${x!=null&&r2(x)===best[l]?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
       return `<table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>${L.day(l)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
     };
-    $("#trustbody").innerHTML=`<div id="away"></div><div class="cols">
+    /* Scope toggle. Finland is the default and the only scope any claim is
+       made about; rest/all are display-only pools score.py marks exploratory.
+       Buttons appear only once the nightly run has produced scope boards. */
+    const SC={fi:{t2m:d.hourly_t2m||{},ws:d.hourly_ws||{},rain:d.rain_occurrence||{},amt:d.hourly_rain_amount||{}}};
+    for(const k of ["rest","all"]){const s=(d.scopes||{})[k];
+      if(s&&Object.keys(s.hourly_t2m||{}).length)
+        SC[k]={t2m:s.hourly_t2m,ws:s.hourly_ws||{},rain:s.rain_occurrence||{},amt:s.hourly_rain_amount||{}};}
+    const scopeBtns=Object.keys(SC).length>1?
+      `<div class="scope">${[["fi",L.scopeFi],["rest",L.scopeRest],["all",L.scopeAll]]
+        .filter(([k])=>SC[k]).map(([k,t])=>`<button data-sc="${k}" class="${k==="fi"?"on":""}">${t}</button>`).join("")}</div>`:"";
+    const boards=sc=>{const v=SC[sc];return `<div class="cols">
       <div><h4>${L.h4members}</h4><div id="members"></div></div>
-      <div><h4>${L.h4t2m}</h4>${mkTbl(d.hourly_t2m||{},"mae",false)}</div></div>
+      <div><h4>${L.h4t2m}</h4>${mkTbl(v.t2m,"mae",false)}</div></div>
       <div class="cols">
-        <div><h4>${L.h4ws}</h4>${mkTbl(d.hourly_ws||{},"mae",false)}</div>
-        <div><h4>${L.h4rain}</h4>${mkTbl(d.rain_occurrence||{},"csi",true)}</div>
-      </div>
+        <div><h4>${L.h4ws}</h4>${mkTbl(v.ws,"mae",false)}</div>
+        <div><h4>${L.h4rain}</h4>${mkTbl(v.rain,"csi",true)}</div>
+      </div>`
+      +(Object.keys(v.amt).length?`<div class="cols">
+        <div><h4>${L.h4amt}</h4>${mkTbl(v.amt,"mae",false)}</div><div></div>
+      </div>`:"")
+      +(sc!=="fi"?`<div class="scopenote">${L.scopeNote}</div>`:"");};
+    $("#trustbody").innerHTML=`<div id="away"></div>${scopeBtns}
+      <div id="boards">${boards("fi")}</div>
       <div class="fine">${c&&c.ci95?L.fine(c.days,c.n.toLocaleString(L.locale),
         (window._BEAT||[]).map(b=>`${b.label} (−${b.pct} %)`).join(", ")):""}
         ${L.honesty}</div>`;
+    document.querySelectorAll(".scope button").forEach(b=>b.onclick=()=>{
+      document.querySelectorAll(".scope button").forEach(x=>x.classList.toggle("on",x===b));
+      $("#boards").innerHTML=boards(b.dataset.sc);members();});
     if(d.generated)$("#gen").textContent=L.gen+new Date(d.generated*1000).toISOString().slice(0,10)+".";
     members();away();
   }catch(e){$("#trustbody").innerHTML=`<div class="load">${L.statsFail}</div>`}

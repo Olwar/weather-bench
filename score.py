@@ -40,6 +40,11 @@ FI_CITIES = frozenset(c["key"] for c in CITIES if c["country"] == "fi")
 COUNTRY_CITIES = {}
 for c in CITIES:
     COUNTRY_CITIES.setdefault(c["country"], set()).add(c["key"])
+# Cross-country pooled scopes for the site's scope toggle. Pooling mixes truth
+# networks and competitor coverage, so these are display-only exploratory
+# boards: no inference cells, and they must never feed the Finnish families.
+REST_CITIES = frozenset(c["key"] for c in CITIES if c["country"] != "fi")
+ALL_CITIES = FI_CITIES | REST_CITIES
 
 HKI = ZoneInfo("Europe/Helsinki")
 RAIN_THR = 0.1     # mm/h for occurrence skill
@@ -479,6 +484,10 @@ def main():
     t2m_q = hourly_board(con, "t2m", quantize=True)
     ws = hourly_board(con, "ws")
     rain_occ = rain_occurrence_board(con)
+    # Rain amount in mm/h. MAE over all hours is dominated by dry hours, so
+    # this rewards not-crying-wolf as much as nailing the downpour - fair, but
+    # a different question than occurrence CSI, hence a separate board.
+    rain_amt = hourly_board(con, "rain1h")
     # Extended exploratory boards (collection began 2026-08-22; they stay empty
     # until forecast/observation overlap accrues, and hourly_board copes).
     extended = {v: hourly_board(con, v) for v in ("rh", "td", "gust", "cc", "pmsl")}
@@ -494,6 +503,15 @@ def main():
             "rain_occurrence": rain_occurrence_board(con, cities=cits),
         }
         for cc, cits in COUNTRY_CITIES.items() if cc != "fi"
+    }
+    scopes = {
+        name: {
+            "hourly_t2m": hourly_board(con, "t2m", cities=cits),
+            "hourly_ws": hourly_board(con, "ws", cities=cits),
+            "rain_occurrence": rain_occurrence_board(con, cities=cits),
+            "hourly_rain_amount": hourly_board(con, "rain1h", cities=cits),
+        }
+        for name, cits in (("rest", REST_CITIES), ("all", ALL_CITIES))
     }
     pairs = {
         (cand, comp): pairwise(con, cand, comp)
@@ -519,6 +537,9 @@ def main():
     for cc in sorted(k for k in COUNTRY_CITIES if k != "fi"):
         print_board(f"[{cc}] hourly t2m", countries[cc]["hourly_t2m"])
     print_board("Rain occurrence (>=0.1mm/h) by lead day", rain_occ, unit="CSI, higher better", higher_better=True)
+    print_board("Rain amount by lead day", rain_amt, unit="mm/h MAE")
+    for name in ("rest", "all"):
+        print_board(f"[{name}] hourly t2m", scopes[name]["hourly_t2m"])
     print_board("Daily tmin/tmax/rain by lead day", daily, unit="degC / mm MAE")
     print_pairwise(pairs, "Pairwise inference: pre-registered family")
     if any(blend_pairs.values()):
@@ -527,7 +548,8 @@ def main():
 
     (DATA_DIR / "prospective_results.json").write_text(json.dumps({
         "hourly_t2m": t2m, "hourly_t2m_quantized": t2m_q, "hourly_ws": ws,
-        "rain_occurrence": rain_occ, "daily": daily,
+        "rain_occurrence": rain_occ, "hourly_rain_amount": rain_amt, "daily": daily,
+        "scopes": scopes,
         **{f"hourly_{v}": extended[v] for v in extended},
         "wind_direction": wdir, "cloud_classes": cloud_cls,
         "countries": countries,
