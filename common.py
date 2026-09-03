@@ -145,10 +145,15 @@ def fmi_simple(storedquery: str, expect_pos=None, _tries: int = 3, _timeout: flo
 def get_db() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
-    # WAL + generous busy timeout: score.py / sqlite3 CLI reads during a multi-minute
-    # collect run must not make the final commit die with "database is locked".
+    # WAL + a busy timeout longer than any writer's transaction. The nightly
+    # blend rebuild commits once per blend (up to ~10 min each) and the wipe is
+    # one ~15 min DELETE; the 5-hourly collect timer drifts and periodically
+    # lands inside that window. With a short timeout collect died with
+    # "database is locked" and the whole snapshot was lost (2026-09-03 05:04Z).
+    # Waiting up to an hour is harmless: WAL readers are never blocked, and a
+    # collect run that waits still stores its snapshot.
     con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA busy_timeout=15000")
+    con.execute("PRAGMA busy_timeout=3600000")
     con.executescript(
         """
         CREATE TABLE IF NOT EXISTS forecasts(
