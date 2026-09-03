@@ -111,110 +111,154 @@ def _load_obs(con, var, cities=None):
     }
 
 
-def hourly_board(con, var: str, quantize: bool = False, cities=FI_CITIES) -> dict:
-    """quantize=True rounds every forecast to whole units first - the sensitivity
-    check for the 'Foreca only publishes integers' fairness objection."""
-    obs = _load_obs(con, var, cities)
-    cells: dict = {}
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=?"
-    for source, city, run_time, target_time, value in con.execute(q, (var,)):
-        truth = obs.get((city, target_time))
-        if truth is None:
-            continue
-        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
-        if lead_h < 0:
-            continue
-        if quantize:
-            value = float(round(value))
-        _stat(cells, (source, int(lead_h // 24)), value - truth)
+def _city_scopes(scopes):
+    """city -> names of the scopes that contain it. Scopes overlap (all ⊃ fi),
+    so a row is folded into every scope it belongs to in the same pass."""
+    m = defaultdict(list)
+    for name, cits in scopes.items():
+        for c in cits:
+            m[c].append(name)
+    return m
+
+
+def _lead_day(run_time, target_time):
+    lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
+    return None if lead_h < 0 else int(lead_h // 24)
+
+
+def _by_source(cells) -> dict:
     out: dict = defaultdict(dict)
-    for (source, lead_d), s in _finish(cells).items():
+    for (source, lead_d), s in cells.items():
         out[source][str(lead_d)] = s
     return dict(out)
 
 
-def wind_direction_board(con, cities=FI_CITIES) -> dict:
+# Every board builder below takes scopes={name: set(cities)} and returns
+# {name: board}. One pass over the variable's forecast rows serves every scope:
+# the table is 25M+ rows on a slow volume, and the nightly run is disk-bound,
+# so a per-scope pass was the dominant cost (36 passes before, 11 after).
+
+def hourly_boards(con, var: str, scopes: dict, quantized=frozenset()) -> dict:
+    """quantized names the scopes whose forecasts are rounded to whole units
+    first - the sensitivity check for the 'Foreca only publishes integers'
+    fairness objection."""
+    obs = _load_obs(con, var, set().union(*scopes.values()))
+    city_scopes = _city_scopes(scopes)
+    cells = {name: {} for name in scopes}
+    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=?"
+    for source, city, run_time, target_time, value in con.execute(q, (var,)):
+        names = city_scopes.get(city)
+        if not names:
+            continue
+        truth = obs.get((city, target_time))
+        if truth is None:
+            continue
+        lead_d = _lead_day(run_time, target_time)
+        if lead_d is None:
+            continue
+        key = (source, lead_d)
+        err = value - truth
+        err_q = float(round(value)) - truth if quantized else err
+        for name in names:
+            _stat(cells[name], key, err_q if name in quantized else err)
+    return {name: _by_source(_finish(c)) for name, c in cells.items()}
+
+
+def wind_direction_boards(con, scopes: dict) -> dict:
     """Circular error, counted only when the observed wind is >= 2 m/s -
     direction is meteorologically meaningless in near-calm, and including calm
     hours would reward sources that merely guess the climatological direction."""
-    obs_dir = _load_obs(con, "wdir", cities)
-    obs_ws = _load_obs(con, "ws", cities)
-    cells: dict = {}
+    all_cities = set().union(*scopes.values())
+    obs_dir = _load_obs(con, "wdir", all_cities)
+    obs_ws = _load_obs(con, "ws", all_cities)
+    city_scopes = _city_scopes(scopes)
+    cells = {name: {} for name in scopes}
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='wdir'"
     for source, city, run_time, target_time, value in con.execute(q):
+        names = city_scopes.get(city)
+        if not names:
+            continue
         truth = obs_dir.get((city, target_time))
         ws = obs_ws.get((city, target_time))
         if truth is None or ws is None or ws < 2.0:
             continue
-        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
-        if lead_h < 0:
+        lead_d = _lead_day(run_time, target_time)
+        if lead_d is None:
             continue
         d = abs(value - truth) % 360.0
-        _stat(cells, (source, int(lead_h // 24)), min(d, 360.0 - d))
-    out: dict = defaultdict(dict)
-    for (source, lead_d), st in _finish(cells).items():
-        out[source][str(lead_d)] = st
-    return dict(out)
+        for name in names:
+            _stat(cells[name], (source, lead_d), min(d, 360.0 - d))
+    return {name: _by_source(_finish(c)) for name, c in cells.items()}
 
 
-def cloud_class_board(con, cities=FI_CITIES) -> dict:
+def cloud_class_boards(con, scopes: dict) -> dict:
     """3-class hit rate: clear (<=2 octas, i.e. <=25%), overcast (>=7 octas,
     >=87.5%), else partly. A ceilometer's octas and a model's grid-cell cloud
     fraction are cousins rather than twins, so the class view is the fairer
     headline than raw percent MAE (which is also reported)."""
-    obs = _load_obs(con, "cc", cities)
+    obs = _load_obs(con, "cc", set().union(*scopes.values()))
     cls = lambda v: 0 if v <= 25.0 else (2 if v >= 87.5 else 1)
-    cells: dict = defaultdict(lambda: {"hit": 0, "n": 0})
+    city_scopes = _city_scopes(scopes)
+    cells = {name: defaultdict(lambda: {"hit": 0, "n": 0}) for name in scopes}
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='cc'"
     for source, city, run_time, target_time, value in con.execute(q):
+        names = city_scopes.get(city)
+        if not names:
+            continue
         truth = obs.get((city, target_time))
         if truth is None:
             continue
-        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
-        if lead_h < 0:
+        lead_d = _lead_day(run_time, target_time)
+        if lead_d is None:
             continue
-        c = cells[(source, int(lead_h // 24))]
-        c["n"] += 1
-        c["hit"] += 1 if cls(value) == cls(truth) else 0
-    out: dict = defaultdict(dict)
-    for (source, lead_d), c in cells.items():
-        if c["n"] >= 100:
-            out[source][str(lead_d)] = {"n": c["n"], "acc": round(c["hit"] / c["n"], 3)}
-    return dict(out)
+        hit = 1 if cls(value) == cls(truth) else 0
+        for name in names:
+            c = cells[name][(source, lead_d)]
+            c["n"] += 1
+            c["hit"] += hit
+    out = {}
+    for name, cs in cells.items():
+        board: dict = defaultdict(dict)
+        for (source, lead_d), c in cs.items():
+            if c["n"] >= 100:
+                board[source][str(lead_d)] = {"n": c["n"], "acc": round(c["hit"] / c["n"], 3)}
+        out[name] = dict(board)
+    return out
 
 
-def rain_occurrence_board(con, cities=FI_CITIES) -> dict:
-    obs = _load_obs(con, "rain1h", cities)
-    cells: dict = defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0})
+def rain_occurrence_boards(con, scopes: dict) -> dict:
+    obs = _load_obs(con, "rain1h", set().union(*scopes.values()))
+    city_scopes = _city_scopes(scopes)
+    cells = {name: defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0}) for name in scopes}
     q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='rain1h'"
     for source, city, run_time, target_time, value in con.execute(q):
+        names = city_scopes.get(city)
+        if not names:
+            continue
         truth = obs.get((city, target_time))
         if truth is None:
             continue
-        lead_h = (_utc(target_time) - _utc(run_time)).total_seconds() / 3600
-        if lead_h < 0:
+        lead_d = _lead_day(run_time, target_time)
+        if lead_d is None:
             continue
-        key = (source, int(lead_h // 24))
         fc_rain, ob_rain = value >= RAIN_THR, truth >= RAIN_THR
-        if fc_rain and ob_rain:
-            cells[key]["hit"] += 1
-        elif not fc_rain and ob_rain:
-            cells[key]["miss"] += 1
-        elif fc_rain and not ob_rain:
-            cells[key]["fa"] += 1
-        else:
-            cells[key]["cn"] += 1
-    out: dict = defaultdict(dict)
-    for (source, lead_d), c in cells.items():
-        hits, miss, fa = c["hit"], c["miss"], c["fa"]
-        n = hits + miss + fa + c["cn"]
-        out[source][str(lead_d)] = {
-            "n": n,
-            "pod": round(hits / (hits + miss), 3) if hits + miss else None,
-            "far": round(fa / (hits + fa), 3) if hits + fa else None,
-            "csi": round(hits / (hits + miss + fa), 3) if hits + miss + fa else None,
-        }
-    return dict(out)
+        slot = "hit" if fc_rain and ob_rain else "miss" if ob_rain else "fa" if fc_rain else "cn"
+        for name in names:
+            cells[name][(source, lead_d)][slot] += 1
+    out = {}
+    for name, cs in cells.items():
+        board: dict = defaultdict(dict)
+        for (source, lead_d), c in cs.items():
+            hits, miss, fa = c["hit"], c["miss"], c["fa"]
+            n = hits + miss + fa + c["cn"]
+            board[source][str(lead_d)] = {
+                "n": n,
+                "pod": round(hits / (hits + miss), 3) if hits + miss else None,
+                "far": round(fa / (hits + fa), 3) if hits + fa else None,
+                "csi": round(hits / (hits + miss + fa), 3) if hits + miss + fa else None,
+            }
+        out[name] = dict(board)
+    return out
 
 
 def daily_series(con):
@@ -480,38 +524,49 @@ def main():
     n_runs = con.execute("SELECT count(DISTINCT run_time) FROM forecasts").fetchone()[0]
     print(f"Scoring prospective data: {n_runs} collection runs in DB")
 
-    t2m = hourly_board(con, "t2m")
-    t2m_q = hourly_board(con, "t2m", quantize=True)
-    ws = hourly_board(con, "ws")
-    rain_occ = rain_occurrence_board(con)
+    # Scope map shared by every board pass. "fi" feeds the legacy top-level
+    # boards; the rest are exploratory. Overlap is fine - see _city_scopes.
+    scopes = {"fi": FI_CITIES, "rest": REST_CITIES, "all": ALL_CITIES,
+              **{cc: cits for cc, cits in COUNTRY_CITIES.items() if cc != "fi"}}
+    foreign = sorted(k for k in COUNTRY_CITIES if k != "fi")
+
+    t2m_all = hourly_boards(con, "t2m", {**scopes, "fi_q": FI_CITIES}, quantized={"fi_q"})
+    t2m, t2m_q = t2m_all["fi"], t2m_all["fi_q"]
+    ws_all = hourly_boards(con, "ws", scopes)
+    ws = ws_all["fi"]
+    rain_occ_all = rain_occurrence_boards(con, scopes)
+    rain_occ = rain_occ_all["fi"]
     # Rain amount in mm/h. MAE over all hours is dominated by dry hours, so
     # this rewards not-crying-wolf as much as nailing the downpour - fair, but
     # a different question than occurrence CSI, hence a separate board.
-    rain_amt = hourly_board(con, "rain1h")
+    rain_amt_all = hourly_boards(con, "rain1h", scopes)
+    rain_amt = rain_amt_all["fi"]
     # Extended exploratory boards (collection began 2026-08-22; they stay empty
-    # until forecast/observation overlap accrues, and hourly_board copes).
-    extended = {v: hourly_board(con, v) for v in ("rh", "td", "gust", "cc", "pmsl")}
-    wdir = wind_direction_board(con)
-    cloud_cls = cloud_class_board(con)
+    # until forecast/observation overlap accrues, and hourly_boards copes).
+    cc_all = hourly_boards(con, "cc", scopes)
+    extended = {v: hourly_boards(con, v, {"fi": FI_CITIES})["fi"] for v in ("rh", "td", "gust", "pmsl")}
+    extended["cc"] = cc_all["fi"]
+    wdir = wind_direction_boards(con, {"fi": FI_CITIES})["fi"]
+    cloud_cls = cloud_class_boards(con, {"fi": FI_CITIES})["fi"]
     obs_daily, fc_daily = daily_series(con)
     daily = daily_board(con, obs_daily, fc_daily)
     countries = {
         cc: {
-            "hourly_t2m": hourly_board(con, "t2m", cities=cits),
-            "hourly_ws": hourly_board(con, "ws", cities=cits),
-            "hourly_cc": hourly_board(con, "cc", cities=cits),
-            "rain_occurrence": rain_occurrence_board(con, cities=cits),
+            "hourly_t2m": t2m_all[cc],
+            "hourly_ws": ws_all[cc],
+            "hourly_cc": cc_all[cc],
+            "rain_occurrence": rain_occ_all[cc],
         }
-        for cc, cits in COUNTRY_CITIES.items() if cc != "fi"
+        for cc in foreign
     }
-    scopes = {
+    scope_boards = {
         name: {
-            "hourly_t2m": hourly_board(con, "t2m", cities=cits),
-            "hourly_ws": hourly_board(con, "ws", cities=cits),
-            "rain_occurrence": rain_occurrence_board(con, cities=cits),
-            "hourly_rain_amount": hourly_board(con, "rain1h", cities=cits),
+            "hourly_t2m": t2m_all[name],
+            "hourly_ws": ws_all[name],
+            "rain_occurrence": rain_occ_all[name],
+            "hourly_rain_amount": rain_amt_all[name],
         }
-        for name, cits in (("rest", REST_CITIES), ("all", ALL_CITIES))
+        for name in ("rest", "all")
     }
     pairs = {
         (cand, comp): pairwise(con, cand, comp)
@@ -539,7 +594,7 @@ def main():
     print_board("Rain occurrence (>=0.1mm/h) by lead day", rain_occ, unit="CSI, higher better", higher_better=True)
     print_board("Rain amount by lead day", rain_amt, unit="mm/h MAE")
     for name in ("rest", "all"):
-        print_board(f"[{name}] hourly t2m", scopes[name]["hourly_t2m"])
+        print_board(f"[{name}] hourly t2m", scope_boards[name]["hourly_t2m"])
     print_board("Daily tmin/tmax/rain by lead day", daily, unit="degC / mm MAE")
     print_pairwise(pairs, "Pairwise inference: pre-registered family")
     if any(blend_pairs.values()):
@@ -549,7 +604,7 @@ def main():
     (DATA_DIR / "prospective_results.json").write_text(json.dumps({
         "hourly_t2m": t2m, "hourly_t2m_quantized": t2m_q, "hourly_ws": ws,
         "rain_occurrence": rain_occ, "hourly_rain_amount": rain_amt, "daily": daily,
-        "scopes": scopes,
+        "scopes": scope_boards,
         **{f"hourly_{v}": extended[v] for v in extended},
         "wind_direction": wdir, "cloud_classes": cloud_cls,
         "countries": countries,
