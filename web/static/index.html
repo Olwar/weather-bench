@@ -633,7 +633,7 @@ async function find(v){
 document.addEventListener("click",e=>{if(!e.target.closest(".finder"))$("#res").classList.remove("on")});
 
 async function load(lat,lon,name,sub){
-  if(CUR&&(Math.abs(CUR.lat-lat)>1e-6||Math.abs(CUR.lon-lon)>1e-6)){
+  if(CUR&&(Math.abs(CUR.lat-lat)>5e-3||Math.abs(CUR.lon-lon)>5e-3)){
     window._sel=null;window._marks=[];window._pendClear&&window._pendClear();}
   $("#city").textContent=name;$("#loc").textContent=sub||"";
   localStorage.setItem("ilma",JSON.stringify({lat,lon,name,sub}));
@@ -1038,7 +1038,8 @@ function saveState(){
 }
 function restoreSaved(lat,lon){
   try{const st=JSON.parse(localStorage.getItem("ilma_state")||"null");
-    if(!st||Date.now()-st.t>3*864e5||Math.abs(st.lat-lat)>1e-6||Math.abs(st.lon-lon)>1e-6)return false;
+    // the forecast API rounds coordinates to its grid, so match within ~500 m
+    if(!st||Date.now()-st.t>3*864e5||Math.abs(st.lat-lat)>5e-3||Math.abs(st.lon-lon)>5e-3)return false;
     window._plan=st.plan||null;window._marks=Array.isArray(st.marks)?st.marks:[];window._pendingSel=st.sel||null;
     return true}catch(e){return false}
 }
