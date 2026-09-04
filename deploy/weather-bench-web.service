@@ -7,6 +7,8 @@ Type=simple
 WorkingDirectory=/opt/weather-bench
 Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
 Environment=PYTHONPATH=/opt/weather-bench
+# Ilma's chat model, via OpenRouter (app.py defaults to Claude Haiku 4.5).
+Environment=ILMA_CHAT_MODEL=openai/gpt-5.6-luna
 ExecStart=/opt/weather-bench/.venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8200
 Restart=always
 RestartSec=5

@@ -1230,8 +1230,10 @@ evidence();
   const req=(props,...r)=>({type:"object",properties:props,required:r});
   /* Window resolution mirrors place(): explicit args win, else the human's
      chart selection - so "is this safe?" needs no arguments at all. */
+  /* Models write "2026-09-05 18:00" as often as "2026-09-05T18:00"; accept both. */
+  const normT=t=>String(t).trim().replace(" ","T").slice(0,16);
   const win=a=>{
-    if(a.start&&a.end)return {start:a.start,end:a.end,from:"arguments"};
+    if(a.start&&a.end)return {start:normT(a.start),end:normT(a.end),from:"arguments"};
     if(window._sel)return {...window._sel,from:"human's selection on the chart"};
     throw new Error("no time window: pass start and end, or ask the human to drag across the chart");
   };
@@ -1350,7 +1352,7 @@ evidence();
   {name:"select_window",mutates:"selection",image:true,
    description:"Select a time window on the chart - the same gesture the human makes by dragging. Later tools default to it, and the human sees it. Times local, e.g. 2026-08-29T16:00.",
    schema:req({start:{type:"string"},end:{type:"string"}},"start","end"),
-   handler:async a=>{setSelection(a.start,a.end,false,"agent");
+   handler:async a=>{setSelection(normT(a.start),normT(a.end),false,"agent");
      document.querySelector("#chart").scrollIntoView({behavior:"smooth",block:"center"});
      return {selected:window._sel}}},
   {name:"mark_hours",mutates:"marks",image:true,
