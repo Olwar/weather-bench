@@ -224,14 +224,17 @@ svg{display:block;width:100%;overflow:visible}
   background:none;border:0;padding:0;cursor:pointer}
 .selcap button:hover{color:var(--ink)}
 .plot svg{touch-action:pan-y;cursor:crosshair;user-select:none;-webkit-user-select:none}
-.plot svg .sel-out{fill:var(--paper);opacity:.55;transition:opacity .18s}
-.plot svg.dragging .sel-out{opacity:.32}
-.plot svg .sel-edge{stroke:var(--ink);stroke-width:1;opacity:.55;shape-rendering:crispEdges}
-.plot svg .sel-brk{fill:none;stroke:var(--ink);stroke-width:1;opacity:.85}
+.plot svg .sel-out{fill:var(--paper);opacity:.62;transition:opacity .18s}
+.plot svg.dragging .sel-out{opacity:.74}
+.plot svg .sel-in{fill:var(--ink);opacity:.06;transition:opacity .18s}
+.plot svg.dragging .sel-in{opacity:.11}
+.plot svg .sel-edge{stroke:var(--ink);stroke-width:1.5;opacity:.9;shape-rendering:crispEdges}
+.plot svg .sel-brk{fill:none;stroke:var(--ink);stroke-width:1.5}
 .plot svg .sel-tick{fill:var(--ink)}
+.plot svg .sel-lbl{fill:var(--ink);font-family:Karla,sans-serif;font-size:12.5px;letter-spacing:.02em}
 .plot svg .sel-pend{stroke:var(--ink);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
 .d{cursor:pointer}
-.d.sel{background:rgba(24,21,19,.06)}
+.d.sel{background:rgba(24,21,19,.09)}
 .d:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
 
 /* ═══ Ilma corner: avatar, bubble and chat are one element ═══ */
@@ -844,11 +847,14 @@ function applySelection(){
   const yT=c.P.t-8,hh=c.H-c.P.t-c.P.b+8;
   el("rect",{class:"sel-out",x:pl,y:yT,width:Math.max(0,x0-pl),height:hh});
   el("rect",{class:"sel-out",x:x1,y:yT,width:Math.max(0,W-pr-x1),height:hh});
+  el("rect",{class:"sel-in",x:x0,y:yT,width:x1-x0,height:hh});
   el("line",{class:"sel-edge",x1:x0,x2:x0,y1:c.P.t-4,y2:c.H-c.P.b});
   el("line",{class:"sel-edge",x1:x1,x2:x1,y1:c.P.t-4,y2:c.H-c.P.b});
   el("path",{class:"sel-brk",d:`M${x0} ${c.P.t-4}H${x1}`});
-  el("rect",{class:"sel-tick",x:x0-2.5,y:c.P.t-6.5,width:5,height:5});
-  el("rect",{class:"sel-tick",x:x1-2.5,y:c.P.t-6.5,width:5,height:5});
+  el("rect",{class:"sel-tick",x:x0-3,y:c.P.t-7,width:6,height:6});
+  el("rect",{class:"sel-tick",x:x1-3,y:c.P.t-7,width:6,height:6});
+  const lbl=el("text",{class:"sel-lbl",x:Math.max(pl+60,Math.min(W-pr-60,(x0+x1)/2)),y:c.P.t-11,"text-anchor":"middle"});
+  lbl.textContent=fmtWin(m.start,m.end);
   c.svg.insertBefore(g,c.svg.querySelector("#cx"));
 }
 document.addEventListener("keydown",e=>{
