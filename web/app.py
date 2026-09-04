@@ -26,7 +26,7 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -649,6 +649,11 @@ import urllib.request as _rq
 
 OPENROUTER_KEY_FILE = Path("/opt/weather-bench/openrouter_key.txt")
 CHAT_MODEL = os.environ.get("ILMA_CHAT_MODEL", "anthropic/claude-haiku-4.5")
+# Cost fuses for the only endpoint that spends money.
+CHAT_PER_IP_10MIN = int(os.environ.get("ILMA_CHAT_PER_IP_10MIN", "30"))
+CHAT_GLOBAL_10MIN = int(os.environ.get("ILMA_CHAT_GLOBAL_10MIN", "300"))
+CHAT_PER_DAY = int(os.environ.get("ILMA_CHAT_PER_DAY", "2000"))
+_DAILY: dict = {"day": None, "n": 0}
 _RATE: dict = {}
 
 CHAT_SYSTEM = (
@@ -666,13 +671,29 @@ CHAT_SYSTEM = (
 
 
 @app.post("/api/agent/chat")
-def agent_chat(payload: dict):
+def agent_chat(payload: dict, request: Request):
     now = time.time()
-    ip = "shared"  # behind Vercel; per-IP needs header plumbing - keep a global soft cap
+    # Three fuses, cheapest first. nginx already limits per IP; these are the
+    # app-side backstops in case traffic reaches uvicorn some other way.
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else "unknown"))
     hits = [t for t in _RATE.get(ip, []) if now - t < 600]
-    if len(hits) > 120:
+    if len(hits) >= CHAT_PER_IP_10MIN:
         raise HTTPException(429, "rate limited")
     _RATE[ip] = hits + [now]
+    if len(_RATE) > 5000:  # forget cold IPs
+        for k in [k for k, v in _RATE.items() if not v or now - v[-1] > 600][:2500]:
+            _RATE.pop(k, None)
+    shared = [t for t in _RATE.get("shared", []) if now - t < 600]
+    if len(shared) >= CHAT_GLOBAL_10MIN:
+        raise HTTPException(429, "rate limited")
+    _RATE["shared"] = shared + [now]
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    if _DAILY.get("day") != day:
+        _DAILY.update(day=day, n=0)
+    if _DAILY["n"] >= CHAT_PER_DAY:
+        raise HTTPException(429, "daily chat budget spent - try again tomorrow")
+    _DAILY["n"] += 1
 
     msgs = payload.get("messages") or []
     tools = payload.get("tools") or []
