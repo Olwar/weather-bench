@@ -627,6 +627,8 @@ async function find(v){
 document.addEventListener("click",e=>{if(!e.target.closest(".finder"))$("#res").classList.remove("on")});
 
 async function load(lat,lon,name,sub){
+  if(CUR&&(Math.abs(CUR.lat-lat)>1e-6||Math.abs(CUR.lon-lon)>1e-6)){
+    window._sel=null;window._marks=[];window._pendClear&&window._pendClear();}
   $("#city").textContent=name;$("#loc").textContent=sub||"";
   localStorage.setItem("ilma",JSON.stringify({lat,lon,name,sub}));
   try{
@@ -973,7 +975,10 @@ async function runTool(t,args){
     let undo=null;
     if(t.mutates==="marks")undo=()=>{window._marks=snap.marks;applyMarks()};
     else if(t.mutates==="plan")undo=()=>{window._plan=snap.plan;renderPlan()};
-    else if(t.mutates==="place")undo=()=>{if(snap.place)load(snap.place.lat,snap.place.lon,snap.place.name,snap.place.sub)};
+    else if(t.mutates==="place")undo=async()=>{if(!snap.place)return;
+      await load(snap.place.lat,snap.place.lon,snap.place.name,snap.place.sub);
+      window._marks=snap.marks;applyMarks();
+      if(snap.sel)setSelection(snap.sel.start,snap.sel.end,true);};
     else if(t.mutates==="selection")undo=()=>setSelection(snap.sel?snap.sel.start:null,snap.sel?snap.sel.end:null,false,"agent");
     actlog.finish(it,undo,null);ava.done(true);
     if(t.mutates&&window._stateChanged)window._stateChanged(t.name);
@@ -1010,6 +1015,21 @@ function shareUrl(){
     plan:window._plan,marks:window._marks,sel:window._sel};
   return location.origin+location.pathname+"#p="+b64u(JSON.stringify(st));
 }
+/* Page state survives a reload (and the ChatGPT browser's window switches,
+   which reload the page): selection, highlights and plan are kept per place
+   for three days. A share link in the URL wins over the saved state. */
+function saveState(){
+  if(!CUR)return;
+  try{localStorage.setItem("ilma_state",JSON.stringify({t:Date.now(),lat:CUR.lat,lon:CUR.lon,
+    sel:window._sel,marks:window._marks,plan:window._plan}))}catch(e){}
+}
+function restoreSaved(lat,lon){
+  try{const st=JSON.parse(localStorage.getItem("ilma_state")||"null");
+    if(!st||Date.now()-st.t>3*864e5||Math.abs(st.lat-lat)>1e-6||Math.abs(st.lon-lon)>1e-6)return false;
+    window._plan=st.plan||null;window._marks=Array.isArray(st.marks)?st.marks:[];window._pendingSel=st.sel||null;
+    return true}catch(e){return false}
+}
+window._saveState=saveState;
 function restoreFromHash(){
   const m=location.hash.match(/^#p=([A-Za-z0-9_-]+)/);if(!m)return null;
   try{const st=JSON.parse(unb64u(m[1]));if(st.v!==1)return null;
@@ -1160,7 +1180,8 @@ applyStatic();
 const shared=restoreFromHash();
 const saved=JSON.parse(localStorage.getItem("ilma")||"null");
 if(shared&&shared.place)load(shared.place.lat,shared.place.lon,shared.place.name,shared.place.sub);
-else saved?load(saved.lat,saved.lon,saved.name,saved.sub):load(60.17523,24.94459,"Helsinki",L.defaultSub);
+else if(saved){restoreSaved(saved.lat,saved.lon);load(saved.lat,saved.lon,saved.name,saved.sub)}
+else load(60.17523,24.94459,"Helsinki",L.defaultSub);
 renderPlan();
 setTimeout(()=>shared?ava.say(L.avaShared,6000):ava.hello(),1200);
 evidence();
@@ -1433,7 +1454,7 @@ evidence();
     }
   }
   let stTmr=null;
-  window._stateChanged=()=>{clearTimeout(stTmr);stTmr=setTimeout(registerAll,250)};
+  window._stateChanged=()=>{clearTimeout(stTmr);stTmr=setTimeout(()=>{registerAll();saveState()},250)};
   registerAll();
   // Verification evidence as a RESOURCE too, where the surface supports it
   const ctx0=ctxOf();
