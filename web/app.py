@@ -473,12 +473,24 @@ def agent_stability(lat: float, lon: float, date: str):
     vs historical churn at this lead? Only benchmark cities carry run
     history; the nearest one answers, distance disclosed."""
     city, km = _nearest_city(lat, lon)
-    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-    rows = con.execute(
-        "SELECT run_time, value FROM forecasts WHERE source='ecmwf_aifs025_single'"
-        " AND city=? AND var='t2m' AND target_time LIKE ?",
-        (city["key"], f"{date}%")).fetchall()
-    con.close()
+    # Runs older than the model horizon cannot hold this date, so bound
+    # run_time: the PK is (source, city, run_time, ...), and the bound turns
+    # a per-city scan into a range. Cached briefly: while the nightly scoring
+    # job saturates the volume, a cold read of one city took 45 s.
+    try:
+        since = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=16)).strftime("%Y-%m-%dT00:00Z")
+    except ValueError:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    def _q():
+        con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            return con.execute(
+                "SELECT run_time, value FROM forecasts WHERE source='ecmwf_aifs025_single'"
+                " AND city=? AND run_time>=? AND var='t2m' AND target_time LIKE ?",
+                (city["key"], since, f"{date}%")).fetchall()
+        finally:
+            con.close()
+    rows = _cached(("stability", city["key"], date), _q)
     runs = {}
     for rt, v in rows:
         runs.setdefault(rt, []).append(v)

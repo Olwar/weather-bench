@@ -894,10 +894,11 @@ const ava=(function(){
   return {
     say:speak,
     study(){set("left");clearTimeout(studyTmr);studyTmr=setTimeout(()=>{studyTmr=null;if(!busy)set("idle")},1500)},
-    busy(text){busy++;set("think");speak(text,0,null,true)},
-    done(ok){busy=Math.max(0,busy-1);if(busy)return;
+    busy(text,mut){busy++;set("think");if(mut||!open())speak(text,0,null,true)},
+    done(ok,mut){busy=Math.max(0,busy-1);if(busy)return;
       set(ok?"happy":"idle");
       if(!ok)speak(L.avaFail,2500);
+      else if(!mut){if(!open()){clearTimeout(sayTmr);sayTmr=setTimeout(()=>say.classList.remove("on"),1200)}}
       else if(Date.now()-lastSay>1500)speak(L.avaDone,2500,null,true);
       else{clearTimeout(sayTmr);sayTmr=setTimeout(()=>say.classList.remove("on"),6000)}
       setTimeout(()=>{if(!busy)set(open()?"left":"idle")},1800)},
@@ -971,7 +972,7 @@ async function runTool(t,args){
   args=args||{};
   const it=actlog.add(t.name,describeArgs(args),JSON.stringify(args),!!t.ro,t.mutates||null);
   const d=L.doing[DOING[t.name]||"look"];
-  ava.busy(typeof d==="function"?d(args.place||"…"):d);
+  ava.busy(typeof d==="function"?d(args.place||"…"):d,!!t.mutates);
   const snap={marks:JSON.parse(JSON.stringify(window._marks)),
     plan:window._plan?JSON.parse(JSON.stringify(window._plan)):null,
     place:CUR?{lat:CUR.lat,lon:CUR.lon,name:$("#city").textContent,sub:$("#loc").textContent}:null,
@@ -986,10 +987,10 @@ async function runTool(t,args){
       window._marks=snap.marks;applyMarks();
       if(snap.sel)setSelection(snap.sel.start,snap.sel.end,true);};
     else if(t.mutates==="selection")undo=()=>setSelection(snap.sel?snap.sel.start:null,snap.sel?snap.sel.end:null,false,"agent");
-    actlog.finish(it,undo,null);ava.done(true);
+    actlog.finish(it,undo,null);ava.done(true,!!t.mutates);
     if(t.mutates&&window._stateChanged)window._stateChanged(t.name);
     return out;
-  }catch(e){actlog.finish(it,null,String(e.message||e).slice(0,140));ava.done(false);throw e}
+  }catch(e){actlog.finish(it,null,String(e.message||e).slice(0,140));ava.done(false,!!t.mutates);throw e}
 }
 window._runTool=runTool;
 
