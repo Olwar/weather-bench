@@ -359,6 +359,7 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
     <div class="label" id="chartLabel">Next 7 days · the shaded band shows how much the models disagree</div>
     <div class="selhint" id="selhint"></div>
     <div class="selcap" id="selcap" aria-live="polite"></div>
+    <button class="pill" id="rmMarks" hidden></button>
   </div>
   <div class="plot"><div class="tip" id="tip"></div><div id="chart" class="load">loading…</div></div>
 </section>
@@ -450,7 +451,8 @@ en:{
     get_current_view:"Looked at the page",select_window:"Picked",mark_hours:"Highlighted",clear_marks:"Cleared highlights",
     set_plan:"Wrote the plan",get_plan:"Read the plan",share_plan:"Made a share link",snapshot_chart:"Looked at the chart",
     compare_places:"Compared",show_me:"Showed"},
-  selHint:"Pick hours: drag on the chart, or tap a day below.", selClear:"Clear",
+  selHint:"Pick hours: drag on the chart, or tap a day below.", selClear:"Clear", rmMarks:"Remove highlights",
+  avaRestored:"I kept your highlights and plan from earlier. Not wanted? Remove them above the chart.",
   actTitle:"Agent activity", actHide:"Hide", undo:"Undo", undone:"Undone", failed:"Failed: ",
   lines:n=>n===1?"1 line":`${n} lines`, share:"Copy share link", shared:"Link copied",
   h4amt:"Rain amount mean error, mm/h — lower is better",
@@ -512,7 +514,8 @@ fi:{
     get_current_view:"Katsoi sivua",select_window:"Valitsi",mark_hours:"Korosti",clear_marks:"Poisti korostukset",
     set_plan:"Kirjoitti suunnitelman",get_plan:"Luki suunnitelman",share_plan:"Teki jakolinkin",snapshot_chart:"Katsoi kaaviota",
     compare_places:"Vertaili",show_me:"Näytti"},
-  selHint:"Valitse tunnit: vedä kaaviossa tai napauta päivää alla.", selClear:"Tyhjennä",
+  selHint:"Valitse tunnit: vedä kaaviossa tai napauta päivää alla.", selClear:"Tyhjennä", rmMarks:"Poista korostukset",
+  avaRestored:"Säilytin aiemmat korostuksesi ja suunnitelman. Etkö halua niitä? Poista ne kaavion yläpuolelta.",
   actTitle:"Agentin toimet", actHide:"Piilota", undo:"Kumoa", undone:"Kumottu", failed:"Epäonnistui: ",
   lines:n=>n===1?"1 rivi":`${n} riviä`, share:"Kopioi jakolinkki", shared:"Linkki kopioitu",
   h4amt:"Sademäärän keskivirhe, mm/h — pienempi on parempi",
@@ -756,6 +759,8 @@ function chart(hs){
 /* agent-painted highlights: [{start,end,label,kind}] in page-local time */
 window._marks=[];
 function applyMarks(){
+  const b=document.getElementById("rmMarks");
+  if(b){b.hidden=!window._marks.length;b.textContent=L.rmMarks;}
   const c=window._chartCtx; if(!c)return;
   c.svg.querySelectorAll(".agentmark").forEach(e=>e.remove());
   for(const m of window._marks){
@@ -945,7 +950,8 @@ const actlog=(function(){
     render
   };
 })();
-window._applyAgentUi=()=>{actlog.render();ava.hide();
+document.getElementById("rmMarks").onclick=()=>{window._marks=[];applyMarks();if(window._stateChanged)window._stateChanged("marks")};
+window._applyAgentUi=()=>{actlog.render();ava.hide();applyMarks();
   if(window._sel)setSelection(window._sel.start,window._sel.end,true);else $("#selhint").textContent=L.selHint;
   const sb=$("#planShare");if(sb)sb.textContent=L.share;};
 
@@ -1187,10 +1193,10 @@ applyStatic();
 const shared=restoreFromHash();
 const saved=JSON.parse(localStorage.getItem("ilma")||"null");
 if(shared&&shared.place)load(shared.place.lat,shared.place.lon,shared.place.name,shared.place.sub);
-else if(saved){restoreSaved(saved.lat,saved.lon);load(saved.lat,saved.lon,saved.name,saved.sub)}
+else if(saved){window._restored=restoreSaved(saved.lat,saved.lon)&&(window._marks.length||window._plan);load(saved.lat,saved.lon,saved.name,saved.sub)}
 else load(60.17523,24.94459,"Helsinki",L.defaultSub);
 renderPlan();
-setTimeout(()=>shared?ava.say(L.avaShared,6000):ava.hello(),1200);
+setTimeout(()=>shared?ava.say(L.avaShared,6000):window._restored?ava.say(L.avaRestored,9000):ava.hello(),1200);
 evidence();
 
 /* ═══════════ WebMCP: the page as an MCP server ═══════════
