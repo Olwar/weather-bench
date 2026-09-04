@@ -272,6 +272,17 @@ def webmcp_js():
     return FileResponse(STATIC / "webmcp.js", media_type="application/javascript")
 
 
+@app.get("/avatar/{name}.png")
+def avatar_png(name: str):
+    """Ilma avatar frames (idle/left/right/down/think/happy)."""
+    if not name.isalpha():
+        raise HTTPException(404)
+    p = STATIC / "avatar" / f"{name}.png"
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/png")
+
+
 @app.get("/favicon.svg")
 def favicon_svg():
     return FileResponse(STATIC / "favicon.svg", media_type="image/svg+xml")
