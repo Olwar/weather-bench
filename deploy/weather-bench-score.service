@@ -11,3 +11,6 @@ Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
 ExecStart=/bin/sh -c "/opt/weather-bench/.venv/bin/python /opt/weather-bench/blend.py && /opt/weather-bench/.venv/bin/python /opt/weather-bench/score.py > /opt/weather-bench/data/score_board.txt && /opt/weather-bench/.venv/bin/python /opt/weather-bench/agent_stats.py && /opt/weather-bench/.venv/bin/python /opt/weather-bench/blend.py --wipe-only"
 MemoryMax=2G
 Nice=10
+# Idle I/O class: the site's reads must win over the nightly full-table
+# passes on the slow volume (a cold per-city read took 71 s without this).
+IOSchedulingClass=idle
