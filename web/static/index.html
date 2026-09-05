@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <!-- Chrome WebMCP origin trial (expires 2026-11-17): makes navigator.modelContext
      available to every stock Chrome 149+ visitor on this origin - no flags. -->
 <meta http-equiv="origin-trial" content="AuoyG/qa4kDbXueZBS89MmqZHCRAtiPr5vA8GIatSeQ5qCfix/w4X0b6A6mnLu+WniORxFN3WCL86w23knvFug8AAABHeyJvcmlnaW4iOiJodHRwczovL2lsbWEuaW86NDQzIiwiZmVhdHVyZSI6IldlYk1DUCIsImV4cGlyeSI6MTc5NDg3MzYwMH0=">
@@ -303,6 +303,7 @@ body.ai-open .ava .say{opacity:0;pointer-events:none}
   .ava img{width:72px;height:72px}
   .ava .say{max-width:200px;font-size:12.5px;margin-right:10px}
   .ai-panel{left:10px;right:10px;bottom:10px;width:auto;max-height:calc(100dvh - 20px);border-bottom-right-radius:18px}
+  .ai-in textarea{font-size:16px}
   body.ai-open .ava{display:none}
 }
 footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
@@ -1502,8 +1503,19 @@ evidence();
 (function initIlmaChat(){
   const $=s=>document.querySelector(s);
   const panel=$("#aiPanel"),msgsEl=$("#aiMsgs"),inp=$("#aiInput"),avaBtn=$("#avaBtn");
+  /* Phones: when the keyboard opens, the visual viewport shrinks but a fixed
+     sheet does not follow. Size it to what is actually visible. */
+  const vv=window.visualViewport;
+  function fitSheet(){
+    if(!vv||!panel.classList.contains("on")||!matchMedia("(max-width:760px)").matches){panel.style.maxHeight="";panel.style.bottom="";return}
+    panel.style.maxHeight=Math.max(220,vv.height-20)+"px";
+    panel.style.bottom=Math.max(10,window.innerHeight-vv.height-vv.offsetTop+10)+"px";
+    msgsEl.scrollTop=msgsEl.scrollHeight;
+  }
+  if(vv){vv.addEventListener("resize",fitSheet);vv.addEventListener("scroll",fitSheet)}
+  inp.addEventListener("focus",()=>setTimeout(fitSheet,300));
   window._openChat=function(prefill){
-    panel.classList.add("on");document.body.classList.add("ai-open");
+    panel.classList.add("on");document.body.classList.add("ai-open");setTimeout(fitSheet,50);
     avaBtn.setAttribute("aria-expanded","true");
     try{localStorage.setItem("ilma_chat_seen","1")}catch(e){}
     if(window._ava)window._ava.chatOpened();
@@ -1511,7 +1523,7 @@ evidence();
     inp.focus();
   };
   window._closeChat=function(){
-    panel.classList.remove("on");document.body.classList.remove("ai-open");
+    panel.classList.remove("on");document.body.classList.remove("ai-open");panel.style.maxHeight="";panel.style.bottom="";
     avaBtn.setAttribute("aria-expanded","false");
     if(window._ava)window._ava.chatClosed();avaBtn.focus();
   };
