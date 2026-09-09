@@ -59,7 +59,7 @@ STALE_OK = 3 * 3600    # ...but an expired entry is still a fine thing to SHOW
 _cache: dict = {}
 _refreshing: set = set()
 
-app = FastAPI(title="weather-bench", docs_url=None, redoc_url=None)
+app = FastAPI(title="weather-bench", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def _cached(key, fn):
