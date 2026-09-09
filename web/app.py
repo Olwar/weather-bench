@@ -727,4 +727,35 @@ def agent_chat(payload: dict, request: Request):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"model call failed: {e}")
     choice = (data.get("choices") or [{}])[0]
+    _log_chat(ip, msgs, choice.get("message") or {}, data.get("usage") or {}, CHAT_MODEL)
     return {"message": choice.get("message"), "finish_reason": choice.get("finish_reason")}
+
+
+CHAT_LOG = DATA_DIR / "chat_log.jsonl"
+
+
+def _log_chat(ip, msgs, reply, usage, model):
+    """One JSON line per model round: the newest user message, the model's
+    reply (text or tool calls), token usage. The visitor is a short hash of
+    the address, enough to group a conversation, not to identify a person.
+    Read with deploy/chats.sh."""
+    try:
+        import hashlib
+        last_user = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
+        tool_results = [m for m in msgs[-6:] if m.get("role") == "tool"]
+        entry = {
+            "t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "who": hashlib.sha256(ip.encode()).hexdigest()[:10],
+            "turn": sum(1 for m in msgs if m.get("role") == "user"),
+            "user": (last_user or {}).get("content") if not tool_results else None,
+            "tool_results": len(tool_results) or None,
+            "reply": reply.get("content"),
+            "tool_calls": [{"name": tc["function"]["name"], "args": tc["function"].get("arguments")}
+                           for tc in (reply.get("tool_calls") or [])] or None,
+            "tokens": {"in": usage.get("prompt_tokens"), "out": usage.get("completion_tokens")},
+            "model": model,
+        }
+        with open(CHAT_LOG, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001 - logging must never break the chat
+        pass
