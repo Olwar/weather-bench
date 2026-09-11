@@ -6,18 +6,28 @@
 <!-- Chrome WebMCP origin trial (expires 2026-11-17): makes navigator.modelContext
      available to every stock Chrome 149+ visitor on this origin - no flags. -->
 <meta http-equiv="origin-trial" content="AuoyG/qa4kDbXueZBS89MmqZHCRAtiPr5vA8GIatSeQ5qCfix/w4X0b6A6mnLu+WniORxFN3WCL86w23knvFug8AAABHeyJvcmlnaW4iOiJodHRwczovL2lsbWEuaW86NDQzIiwiZmVhdHVyZSI6IldlYk1DUCIsImV4cGlyeSI6MTc5NDg3MzYwMH0=">
-<title>Ilma</title>
-<meta name="description" content="A weather forecast that blends six forecast models and shows how much they agree.">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<!--seo-->
+<title>Ilma – a weather forecast that shows how much to trust it</title>
+<meta name="description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night, and gives AI agents 19 WebMCP tools.">
+<link rel="canonical" href="https://ilma.io/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#FAF6EF">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://ilma.io">
-<meta property="og:title" content="Ilma">
-<meta property="og:description" content="Six forecast models. One verified forecast. Results are checked against real weather stations every night.">
+<meta property="og:site_name" content="Ilma">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://ilma.io/">
+<meta property="og:title" content="Ilma – a weather forecast that shows how much to trust it">
+<meta property="og:description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night, and gives AI agents 19 WebMCP tools.">
 <meta property="og:image" content="https://ilma.io/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ilma – a weather forecast that shows how much to trust it">
+<meta name="twitter:description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night, and gives AI agents 19 WebMCP tools.">
 <meta name="twitter:image" content="https://ilma.io/og.png">
+<script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebSite", "name": "Ilma", "url": "https://ilma.io/", "inLanguage": ["en", "fi"], "description": "A weather forecast that blends six models, shows how much they disagree, and verifies its accuracy against real weather stations every night."}, {"@context": "https://schema.org", "@type": "WebApplication", "name": "Ilma", "url": "https://ilma.io/", "applicationCategory": "Weather", "operatingSystem": "Any", "browserRequirements": "Requires JavaScript", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "featureList": ["Six-model blended forecast", "Model disagreement band", "Nightly verification against weather stations", "19 WebMCP tools for browser agents", "Ilma assistant"]}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is the forecast based on?", "acceptedAnswer": {"@type": "Answer", "text": "Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree."}}, {"@type": "Question", "name": "How accurate is it?", "acceptedAnswer": {"@type": "Answer", "text": "Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant."}}, {"@type": "Question", "name": "What can the Ilma assistant do?", "acceptedAnswer": {"@type": "Answer", "text": "Ask about the weather in your own words, for example whether Saturday evening works for an outdoor event. The assistant uses the same tools that browser AI agents get: calibrated probabilities, forecast stability and when to decide."}}, {"@type": "Question", "name": "What is WebMCP?", "acceptedAnswer": {"@type": "Answer", "text": "WebMCP is an open standard that lets a web page offer tools to AI agents running in the browser. Ilma registers 19 tools, so an agent can read verified probabilities and mark the chart the human is looking at."}}]}]</script>
+<!--/seo-->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&family=Karla:ital,wght@0,300..700;1,300..500&display=swap" rel="stylesheet">
@@ -308,6 +318,21 @@ body.ai-open .ava .say{opacity:0;pointer-events:none}
   .ai-in textarea{font-size:16px}
   body.ai-open .ava{display:none}
 }
+/* ═══ about + FAQ: the page's own words, present before any script runs ═══ */
+.about{margin:clamp(38px,6vw,60px) 0 0;max-width:72ch}
+.about h1{font-family:var(--display);font-weight:400;font-size:clamp(24px,3vw,30px);letter-spacing:-.01em;margin:0 0 14px;line-height:1.2}
+.about p{font-size:15px;line-height:1.75;color:var(--ink-2);margin:0 0 12px}
+.faq{margin-top:18px;border-top:1px solid var(--rule)}
+.faq details{border-bottom:1px solid var(--rule)}
+.faq summary{cursor:pointer;padding:12px 0;font-family:var(--display);font-size:17px;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--ink-3)}
+.faq details[open] summary::after{content:"–"}
+.faq p{padding:0 0 14px;margin:0}
+.cities{margin:34px 0 0;font-size:13px}
+.cities .label{margin-bottom:10px}
+.cities .row{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px}
+.cities a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--rule)}
+.cities a:hover{color:var(--ink);border-color:var(--ink-3)}
 footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
 .load{color:var(--ink-3);font-style:italic;padding:16px 0}
 .bad{color:var(--warm);padding:16px 0}
@@ -404,6 +429,8 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
     <button id="aiSend">Kysy</button></div>
 </div>
 
+<!--about--><section class="about" id="about"><h1>Ilma – a weather forecast that shows how much to trust it</h1><p>Ilma is a weather forecast for any place on earth, seven days ahead, hour by hour. It averages six forecast models and shows the band the models fall in: a narrow band means a confident forecast, a wide one means the models disagree and you should plan for both outcomes.</p><p>The forecast's accuracy is verified every night against 14 Finnish weather stations, and the results are published on this page. The site claims to be better than a named competitor only when the difference is statistically significant.</p><p>Ilma is also built for AI agents. The page registers 19 WebMCP tools, so an agent in your browser can read calibrated probabilities, see how stable the forecast is, mark the chart you are looking at, and write a plan you both can edit.</p><div class="faq"><details><summary>What is the forecast based on?</summary><p>Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree.</p></details><details><summary>How accurate is it?</summary><p>Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant.</p></details><details><summary>What can the Ilma assistant do?</summary><p>Ask about the weather in your own words, for example whether Saturday evening works for an outdoor event. The assistant uses the same tools that browser AI agents get: calibrated probabilities, forecast stability and when to decide.</p></details><details><summary>What is WebMCP?</summary><p>WebMCP is an open standard that lets a web page offer tools to AI agents running in the browser. Ilma registers 19 tools, so an agent can read verified probabilities and mark the chart the human is looking at.</p></details></div></section><!--/about-->
+<!--cities--><nav class="cities" aria-label="Cities"><div class="label">Sää Suomessa · Weather elsewhere</div><div class="row"><a href="/saa/helsinki/">Sää Helsinki</a><a href="/saa/tampere/">Sää Tampere</a><a href="/saa/oulu/">Sää Oulu</a><a href="/saa/rovaniemi/">Sää Rovaniemi</a><a href="/saa/turku/">Sää Turku</a><a href="/saa/jyvaskyla/">Sää Jyväskylä</a><a href="/saa/vaasa/">Sää Vaasa</a><a href="/saa/kuopio/">Sää Kuopio</a><a href="/saa/joensuu/">Sää Joensuu</a><a href="/saa/lappeenranta/">Sää Lappeenranta</a><a href="/saa/pori/">Sää Pori</a><a href="/saa/kajaani/">Sää Kajaani</a><a href="/saa/sodankyla/">Sää Sodankylä</a><a href="/saa/mariehamn/">Sää Maarianhamina</a></div><div class="row"><a href="/weather/stockholm/">Stockholm weather</a><a href="/weather/goteborg/">Göteborg weather</a><a href="/weather/malmo/">Malmö weather</a><a href="/weather/lulea/">Luleå weather</a><a href="/weather/kobenhavn/">Copenhagen weather</a><a href="/weather/aarhus/">Aarhus weather</a><a href="/weather/aalborg/">Aalborg weather</a><a href="/weather/berlin/">Berlin weather</a><a href="/weather/hamburg/">Hamburg weather</a><a href="/weather/munchen/">Munich weather</a><a href="/weather/frankfurt/">Frankfurt weather</a><a href="/weather/koln/">Cologne weather</a><a href="/weather/newyork/">New York weather</a><a href="/weather/chicago/">Chicago weather</a><a href="/weather/houston/">Houston weather</a><a href="/weather/denver/">Denver weather</a><a href="/weather/seattle/">Seattle weather</a><a href="/weather/miami/">Miami weather</a></div></nav><!--/cities-->
 <footer>
   <div><span id="footerTxt">Ilma averages six forecast models — ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute and Open-Meteo — and verifies the result against 14 Finnish weather stations.</span> <span id="gen"></span></div>
 </footer>
@@ -544,7 +571,8 @@ fi:{
     metno_nordic:"MET Nordic"},
   locale:"fi"
 }};
-let LANG=localStorage.getItem("ilma_lang")||"en";
+const PAGE=document.documentElement.dataset;  /* set by web/seo.py on city landing pages */
+let LANG=PAGE.lang||localStorage.getItem("ilma_lang")||"en";
 if(!I18N[LANG])LANG="en";
 let L=I18N[LANG];
 function applyStatic(){
@@ -646,6 +674,7 @@ async function load(lat,lon,name,sub){
     const r=await fetch(`/api/forecast?lat=${lat}&lon=${lon}`);
     if(!r.ok)throw new Error("upstream "+r.status);
     CUR=await r.json();paint();
+    if(!PAGE.city)document.title=(LANG==="fi"?`Sää ${name} – Ilma`:`${name} weather – Ilma`);
     if(window._stateChanged)window._stateChanged("place");
   }catch(e){$("#chart").className="bad";$("#chart").textContent=L.loadFail+e.message}
 }
@@ -1206,7 +1235,8 @@ function away(){
 applyStatic();
 const shared=restoreFromHash();
 const saved=JSON.parse(localStorage.getItem("ilma")||"null");
-if(shared&&shared.place)load(shared.place.lat,shared.place.lon,shared.place.name,shared.place.sub);
+if(PAGE.city)load(+PAGE.lat,+PAGE.lon,PAGE.name,PAGE.sub);
+else if(shared&&shared.place)load(shared.place.lat,shared.place.lon,shared.place.name,shared.place.sub);
 else if(saved){window._restored=restoreSaved(saved.lat,saved.lon)&&(window._marks.length||window._plan);load(saved.lat,saved.lon,saved.name,saved.sub)}
 else load(60.17523,24.94459,"Helsinki",L.defaultSub);
 renderPlan();
