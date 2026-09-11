@@ -186,6 +186,8 @@ svg{display:block;width:100%;overflow:visible}
 .tbl tr.us td{color:var(--paper)}
 .tbl tr.us td:first-child{font-weight:600}
 .tbl td.b{color:#E8B98A}
+.tbl tr.div td{padding:14px 0 6px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(250,246,239,.4);text-align:left;border-bottom:0}
+.tbl tr.short td{color:rgba(250,246,239,.45)}
 .scope{display:inline-flex;border:1px solid rgba(250,246,239,.22);border-radius:99px;overflow:hidden;margin-top:20px}
 .scope button{background:none;border:0;cursor:pointer;font-family:var(--body);font-size:12.5px;
   letter-spacing:.06em;padding:6px 14px;color:var(--paper);opacity:.55;transition:background .2s,opacity .2s}
@@ -457,6 +459,7 @@ en:{
   actTitle:"Agent activity", actHide:"Hide", undo:"Undo", undone:"Undone", failed:"Failed: ",
   lines:n=>n===1?"1 line":`${n} lines`, share:"Copy share link", shared:"Link copied",
   h4amt:"Rain amount mean error, mm/h — lower is better",
+  shortRec:"Shorter record — collected since late August, not comparable with the rows above",
   scopeFi:"Finland", scopeRest:"Rest of world", scopeAll:"All",
   scopeNote:`Outside Finland the comparison is exploratory: different station networks and
     competitors, history only since 26 Aug 2026, and no statistical testing. The headline
@@ -520,6 +523,7 @@ fi:{
   actTitle:"Agentin toimet", actHide:"Piilota", undo:"Kumoa", undone:"Kumottu", failed:"Epäonnistui: ",
   lines:n=>n===1?"1 rivi":`${n} riviä`, share:"Kopioi jakolinkki", shared:"Linkki kopioitu",
   h4amt:"Sademäärän keskivirhe, mm/h — pienempi on parempi",
+  shortRec:"Lyhyempi historia — kerätty elokuun lopusta, ei vertailukelpoinen yllä olevien kanssa",
   scopeFi:"Suomi", scopeRest:"Muut maat", scopeAll:"Kaikki",
   scopeNote:`Suomen ulkopuolella vertailu on kokeellinen: eri asemaverkot ja kilpailijat,
     historiaa vasta 26.8.2026 alkaen, eikä tilastollista testausta. Yllä olevat väitteet
@@ -1130,15 +1134,23 @@ async function evidence(){
          nightly board, not here. */
       const keys=Object.keys(data).filter(s=>leads.some(l=>data[s][l]&&data[s][l][key]!=null))
         .filter(s=>s==="blend_open"||!s.startsWith("blend_"));
-      const srcs=["blend_open",...keys.filter(s=>s!=="blend_open")]
-        .filter(s=>keys.includes(s))
+      /* Sources collected for a fraction of the record (foreign feeds started
+         late August) sit in their own group: a different period is not a
+         ranking, and one short-record row used to sort above Ilma. */
+      const nAt=s=>data[s]["1"]?.n||data[s]["0"]?.n||0;
+      const nMax=Math.max(...keys.map(nAt));
+      const isShort=s=>nAt(s)<0.6*nMax;
+      const order=list=>["blend_open",...list.filter(s=>s!=="blend_open")].filter(s=>list.includes(s))
         .sort((a,b)=>{const av=data[a]["3"]?.[key]??(higher?-9:99),bv=data[b]["3"]?.[key]??(higher?-9:99);
           return higher?r2(bv)-r2(av):r2(av)-r2(bv);});
+      const srcs=order(keys.filter(s=>!isShort(s))),shorts=order(keys.filter(isShort));
       const best={};leads.forEach(l=>{const vs=srcs.map(s=>data[s][l]?.[key]).filter(v=>v!=null).map(r2);
         best[l]=higher?Math.max(...vs):Math.min(...vs)});
-      const rows=srcs.map(s=>`<tr class="${s==="blend_open"?"us":""}"><td>${NICE(s)}</td>`+
+      const row=(s,rank)=>`<tr class="${s==="blend_open"?"us":""}${rank?"":" short"}"><td>${NICE(s)}</td>`+
         leads.map(l=>{const x=data[s][l]?.[key];
-          return `<td class="${x!=null&&r2(x)===best[l]?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>").join("");
+          return `<td class="${rank&&x!=null&&r2(x)===best[l]?"b":""}">${x!=null?x.toFixed(2):"—"}</td>`}).join("")+"</tr>";
+      const rows=srcs.map(s=>row(s,true)).join("")
+        +(shorts.length?`<tr class="div"><td colspan="${leads.length+1}">${L.shortRec}</td></tr>`+shorts.map(s=>row(s,false)).join(""):"");
       return `<table class="tbl"><thead><tr><th></th>${leads.map(l=>`<th>${L.day(l)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
     };
     /* Scope toggle. Finland is the default and the only scope any claim is
