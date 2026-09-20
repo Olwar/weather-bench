@@ -5,10 +5,10 @@ Description=weather-bench rebuild blends and rescore
 Type=oneshot
 WorkingDirectory=/opt/weather-bench
 Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
-# The trailing wipe deletes the derived blend rows once scored - they are
-# rebuilt from members on the next run, and leaving ~7M derived rows in the DB
-# all day would inflate growth and backups by ~40% for nothing.
-ExecStart=/bin/sh -c "/opt/weather-bench/.venv/bin/python /opt/weather-bench/blend.py && /opt/weather-bench/.venv/bin/python /opt/weather-bench/score.py > /opt/weather-bench/data/score_board.txt && /opt/weather-bench/.venv/bin/python /opt/weather-bench/agent_stats.py && /opt/weather-bench/.venv/bin/python /opt/weather-bench/blend.py --wipe-only"
+# Blends are derived in memory by score.py since 2026-09-20; nothing writes
+# to the DB here. (Until then blend.py materialised them as rows every night
+# and a trailing wipe deleted them: 57M rows/day of churn, 2.5 h of the run.)
+ExecStart=/bin/sh -c "/opt/weather-bench/.venv/bin/python /opt/weather-bench/score.py > /opt/weather-bench/data/score_board.txt && /opt/weather-bench/.venv/bin/python /opt/weather-bench/agent_stats.py"
 MemoryMax=2G
 Nice=10
 # Idle I/O class: the site's reads must win over the nightly full-table

@@ -75,9 +75,10 @@ sensitivity board (all sources rounded to integers).
 ### 3. Derived blends (`blend.py`) - exploratory, added 2026-08-19
 
 No single source wins everywhere: FMI's human forecasters own leads 0-2, AIFS
-owns 3-7. `blend.py` writes combinations back into `forecasts` as ordinary
+owns 3-7. `score.py` derives combinations in memory from the member rows of
+each (city, run_time, target_time, var) group and scores them as ordinary
 sources, so they are judged by the same boards, on matched samples, with no
-special handling:
+special handling (member lists live in `blend.py`):
 
 - **blend_mean** - unweighted mean of every member available for that exact
   (city, run_time, target_time, var). Zero fitted parameters, so it cannot
@@ -97,8 +98,10 @@ pre-registered secondary cells. Their competitor set includes
 `ecmwf_aifs025_single`, because "beats Foreca" is a far weaker claim than
 "beats the best single model".
 
-Re-run `blend.py` after each collect; it rebuilds every `blend_*` row and is
-idempotent.
+`blend.py` is now only an ad-hoc tool: run it when you want the blends as
+rows for SQL, then `blend.py --wipe-only` to delete them again. Since
+2026-09-20 the nightly chain never materialises them - writing and deleting
+~57M derived rows a day cost 2.5 h and fragmented the file.
 
 ## Deployment (moved off the laptop 2026-08-19)
 
@@ -112,7 +115,7 @@ renamed `.disabled` - so exactly one collector writes to exactly one database.
 
     weather-bench-web.service      uvicorn on 127.0.0.1:8200, always restarted
     weather-bench-collect.timer    every 5h  -> collect.py
-    weather-bench-score.timer      04:30 UTC -> blend.py && score.py
+    weather-bench-score.timer      04:30 UTC -> score.py && agent_stats.py
 
 nginx proxies :8080 -> :8200 and is deliberately NOT `default_server`: bare-IP
 :80 on that box already serves an unrelated site. A `weather.happypalette.app`
@@ -153,9 +156,10 @@ pre-registered t2m primary is untouched. Method notes:
   sentinel (-1) is stored as 0, Open-Meteo's meters are converted to cm.
 - The dead-feed alarm stays scoped to t2m/ws/rain1h: models that lack an
   extended field must not take down collection of everything else.
-- Blend rows are now **transient**: the nightly score service rebuilds them,
-  scores, then deletes them (`blend.py --wipe-only`). They are derived data;
-  keeping ~7M of them all day inflated DB growth and backups ~40%.
+- Blend rows were made **transient** (rebuilt, scored, deleted nightly) and,
+  since 2026-09-20, are not stored at all: `score.py` derives the blends in
+  memory. They are derived data; keeping ~7M of them all day inflated DB
+  growth and backups ~40%, and rebuilding them nightly cost 2.5 h.
 
 ## International expansion (added 2026-08-26: SE, DK, DE, US)
 

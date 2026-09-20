@@ -25,11 +25,17 @@ Usage: python3 score.py
 import json
 import math
 import random
+import shutil
+import sys
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from common import get_db, DATA_DIR, CITIES
+from blend import MEMBERS, AI_MEMBERS, OPEN_MEMBERS, OPEN_YR_MEMBERS, MIN_MEMBERS
+from blend import VARS as BLEND_VARS
 
 # Verification is only comparable within one country: same climate, same truth
 # network, same competitor coverage. Every pre-existing board and the entire
@@ -73,6 +79,24 @@ PRIMARY = ("ecmwf_aifs025_single", "foreca", "pooled_1_7")
 # family that the real claims must survive.
 BLENDS = ["blend_open", "blend_open_yr", "blend_mean"]
 BLEND_COMPETITORS = ["foreca", "fmi_edited", "ecmwf_aifs025_single", "google_weather", "yr"]
+# The blends are derived HERE, in memory, from the member rows of each
+# (city, run_time, target_time, var) group: the mean of whoever showed up,
+# emitted only when >= MIN_MEMBERS members did. Member lists and the variable
+# set are blend.py's, so the definition lives in one place. Until 2026-09-20
+# blend.py wrote these as rows into `forecasts` every night (2.5 h), score.py
+# read them back, and a wipe deleted them (57M rows/day of churn that
+# fragmented the file and doubled the backups). blend.py remains as an ad-hoc
+# tool for SQL against materialised blend rows; the nightly chain no longer
+# runs it. wdir is never blended (circular) - see blend.VARS.
+BLEND_DEFS = [
+    ("blend_mean", MEMBERS),
+    ("blend_ai", AI_MEMBERS),
+    ("blend_open", OPEN_MEMBERS),
+    ("blend_open_yr", OPEN_YR_MEMBERS),
+]
+BLEND_SOURCES = frozenset(name for name, _ in BLEND_DEFS)
+PAIR_SOURCES = sorted({*CANDIDATES, *COMPETITORS, *BLENDS, *BLEND_COMPETITORS})
+WINDOW_DAYS = 7    # run_time span held in memory at once, per city
 
 
 def _utc(s: str) -> datetime:
@@ -103,12 +127,12 @@ def _finish(cells):
     }
 
 
-def _load_obs(con, var, cities=None):
-    return {
-        (c, t): v
-        for c, t, v in con.execute("SELECT city, time, value FROM observations WHERE var=?", (var,))
-        if cities is None or c in cities
-    }
+def _obs_city(con, city) -> dict:
+    """var -> {time: value} for one city (primary-key prefix read)."""
+    out: dict = defaultdict(dict)
+    for var, t, v in con.execute("SELECT var, time, value FROM observations WHERE city=?", (city,)):
+        out[var][t] = v
+    return out
 
 
 def _city_scopes(scopes):
@@ -126,6 +150,19 @@ def _lead_day(run_time, target_time):
     return None if lead_h < 0 else int(lead_h // 24)
 
 
+# Walks the primary key one distinct value at a time. A plain
+# SELECT DISTINCT source scans the whole 25M+ row index (minutes on the
+# volume); this returns in about a second.
+_DISTINCT_SOURCES = """WITH RECURSIVE s(x) AS (
+  SELECT min(source) FROM forecasts
+  UNION ALL SELECT (SELECT min(source) FROM forecasts WHERE source > x) FROM s WHERE x IS NOT NULL)
+SELECT x FROM s WHERE x IS NOT NULL"""
+
+
+def _sources(con) -> list:
+    return [r[0] for r in con.execute(_DISTINCT_SOURCES)]
+
+
 def _by_source(cells) -> dict:
     out: dict = defaultdict(dict)
     for (source, lead_d), s in cells.items():
@@ -133,135 +170,210 @@ def _by_source(cells) -> dict:
     return dict(out)
 
 
-# Every board builder below takes scopes={name: set(cities)} and returns
-# {name: board}. One pass over the variable's forecast rows serves every scope:
-# the table is 25M+ rows on a slow volume, and the nightly run is disk-bound,
-# so a per-scope pass was the dominant cost (36 passes before, 11 after).
+# Every board below is a handler fed from ONE walk over the forecasts table
+# (walk_city, called per city). The table is 90M+ rows on a slow volume whose
+# pages are scattered by months of 5-hourly inserts, so a full scan is ~45 min
+# of random 4 KB reads; one scan per board (11 of them) was ~8 h of the
+# nightly run. Each handler takes scopes={name: set(cities)} and returns
+# {name: board} from finish(). Scopes overlap (all ⊃ fi) - see _city_scopes.
+#
+# feed(source, city, target_time, lead_d, value, truth, obs_city) is called
+# only for rows with an observation and a non-negative lead day.
 
-def hourly_boards(con, var: str, scopes: dict, quantized=frozenset()) -> dict:
-    """quantized names the scopes whose forecasts are rounded to whole units
-    first - the sensitivity check for the 'Foreca only publishes integers'
-    fairness objection."""
-    obs = _load_obs(con, var, set().union(*scopes.values()))
-    city_scopes = _city_scopes(scopes)
-    cells = {name: {} for name in scopes}
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=?"
-    for source, city, run_time, target_time, value in con.execute(q, (var,)):
-        names = city_scopes.get(city)
+class _MAE:
+    """Hourly MAE/bias by (source, lead day). quantized names the scopes whose
+    forecasts are rounded to whole units first - the sensitivity check for
+    the 'Foreca only publishes integers' fairness objection."""
+
+    def __init__(self, scopes: dict, quantized=frozenset()):
+        self.city_scopes = _city_scopes(scopes)
+        self.quantized = quantized
+        self.cells = {name: {} for name in scopes}
+
+    def feed(self, source, city, target_time, lead_d, value, truth, obs_city):
+        names = self.city_scopes.get(city)
         if not names:
-            continue
-        truth = obs.get((city, target_time))
-        if truth is None:
-            continue
-        lead_d = _lead_day(run_time, target_time)
-        if lead_d is None:
-            continue
-        key = (source, lead_d)
+            return
         err = value - truth
-        err_q = float(round(value)) - truth if quantized else err
+        err_q = float(round(value)) - truth if self.quantized else err
         for name in names:
-            _stat(cells[name], key, err_q if name in quantized else err)
-    return {name: _by_source(_finish(c)) for name, c in cells.items()}
+            _stat(self.cells[name], (source, lead_d), err_q if name in self.quantized else err)
+
+    def finish(self) -> dict:
+        return {name: _by_source(_finish(c)) for name, c in self.cells.items()}
 
 
-def wind_direction_boards(con, scopes: dict) -> dict:
+class _WindDir:
     """Circular error, counted only when the observed wind is >= 2 m/s -
     direction is meteorologically meaningless in near-calm, and including calm
     hours would reward sources that merely guess the climatological direction."""
-    all_cities = set().union(*scopes.values())
-    obs_dir = _load_obs(con, "wdir", all_cities)
-    obs_ws = _load_obs(con, "ws", all_cities)
-    city_scopes = _city_scopes(scopes)
-    cells = {name: {} for name in scopes}
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='wdir'"
-    for source, city, run_time, target_time, value in con.execute(q):
-        names = city_scopes.get(city)
+
+    def __init__(self, scopes: dict):
+        self.city_scopes = _city_scopes(scopes)
+        self.cells = {name: {} for name in scopes}
+
+    def feed(self, source, city, target_time, lead_d, value, truth, obs_city):
+        names = self.city_scopes.get(city)
         if not names:
-            continue
-        truth = obs_dir.get((city, target_time))
-        ws = obs_ws.get((city, target_time))
-        if truth is None or ws is None or ws < 2.0:
-            continue
-        lead_d = _lead_day(run_time, target_time)
-        if lead_d is None:
-            continue
+            return
+        ws = obs_city["ws"].get(target_time)
+        if ws is None or ws < 2.0:
+            return
         d = abs(value - truth) % 360.0
         for name in names:
-            _stat(cells[name], (source, lead_d), min(d, 360.0 - d))
-    return {name: _by_source(_finish(c)) for name, c in cells.items()}
+            _stat(self.cells[name], (source, lead_d), min(d, 360.0 - d))
+
+    def finish(self) -> dict:
+        return {name: _by_source(_finish(c)) for name, c in self.cells.items()}
 
 
-def cloud_class_boards(con, scopes: dict) -> dict:
+class _CloudClass:
     """3-class hit rate: clear (<=2 octas, i.e. <=25%), overcast (>=7 octas,
     >=87.5%), else partly. A ceilometer's octas and a model's grid-cell cloud
     fraction are cousins rather than twins, so the class view is the fairer
     headline than raw percent MAE (which is also reported)."""
-    obs = _load_obs(con, "cc", set().union(*scopes.values()))
-    cls = lambda v: 0 if v <= 25.0 else (2 if v >= 87.5 else 1)
-    city_scopes = _city_scopes(scopes)
-    cells = {name: defaultdict(lambda: {"hit": 0, "n": 0}) for name in scopes}
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='cc'"
-    for source, city, run_time, target_time, value in con.execute(q):
-        names = city_scopes.get(city)
+
+    @staticmethod
+    def cls(v):
+        return 0 if v <= 25.0 else (2 if v >= 87.5 else 1)
+
+    def __init__(self, scopes: dict):
+        self.city_scopes = _city_scopes(scopes)
+        self.cells = {name: defaultdict(lambda: {"hit": 0, "n": 0}) for name in scopes}
+
+    def feed(self, source, city, target_time, lead_d, value, truth, obs_city):
+        names = self.city_scopes.get(city)
         if not names:
-            continue
-        truth = obs.get((city, target_time))
-        if truth is None:
-            continue
-        lead_d = _lead_day(run_time, target_time)
-        if lead_d is None:
-            continue
-        hit = 1 if cls(value) == cls(truth) else 0
+            return
+        hit = 1 if self.cls(value) == self.cls(truth) else 0
         for name in names:
-            c = cells[name][(source, lead_d)]
+            c = self.cells[name][(source, lead_d)]
             c["n"] += 1
             c["hit"] += hit
-    out = {}
-    for name, cs in cells.items():
-        board: dict = defaultdict(dict)
-        for (source, lead_d), c in cs.items():
-            if c["n"] >= 100:
-                board[source][str(lead_d)] = {"n": c["n"], "acc": round(c["hit"] / c["n"], 3)}
-        out[name] = dict(board)
-    return out
+
+    def finish(self) -> dict:
+        out = {}
+        for name, cs in self.cells.items():
+            board: dict = defaultdict(dict)
+            for (source, lead_d), c in cs.items():
+                if c["n"] >= 100:
+                    board[source][str(lead_d)] = {"n": c["n"], "acc": round(c["hit"] / c["n"], 3)}
+            out[name] = dict(board)
+        return out
 
 
-def rain_occurrence_boards(con, scopes: dict) -> dict:
-    obs = _load_obs(con, "rain1h", set().union(*scopes.values()))
-    city_scopes = _city_scopes(scopes)
-    cells = {name: defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0}) for name in scopes}
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var='rain1h'"
-    for source, city, run_time, target_time, value in con.execute(q):
-        names = city_scopes.get(city)
+class _RainOccurrence:
+    def __init__(self, scopes: dict):
+        self.city_scopes = _city_scopes(scopes)
+        self.cells = {name: defaultdict(lambda: {"hit": 0, "miss": 0, "fa": 0, "cn": 0}) for name in scopes}
+
+    def feed(self, source, city, target_time, lead_d, value, truth, obs_city):
+        names = self.city_scopes.get(city)
         if not names:
-            continue
-        truth = obs.get((city, target_time))
-        if truth is None:
-            continue
-        lead_d = _lead_day(run_time, target_time)
-        if lead_d is None:
-            continue
+            return
         fc_rain, ob_rain = value >= RAIN_THR, truth >= RAIN_THR
         slot = "hit" if fc_rain and ob_rain else "miss" if ob_rain else "fa" if fc_rain else "cn"
         for name in names:
-            cells[name][(source, lead_d)][slot] += 1
-    out = {}
-    for name, cs in cells.items():
-        board: dict = defaultdict(dict)
-        for (source, lead_d), c in cs.items():
-            hits, miss, fa = c["hit"], c["miss"], c["fa"]
-            n = hits + miss + fa + c["cn"]
-            board[source][str(lead_d)] = {
-                "n": n,
-                "pod": round(hits / (hits + miss), 3) if hits + miss else None,
-                "far": round(fa / (hits + fa), 3) if hits + fa else None,
-                "csi": round(hits / (hits + miss + fa), 3) if hits + miss + fa else None,
-            }
-        out[name] = dict(board)
-    return out
+            self.cells[name][(source, lead_d)][slot] += 1
+
+    def finish(self) -> dict:
+        out = {}
+        for name, cs in self.cells.items():
+            board: dict = defaultdict(dict)
+            for (source, lead_d), c in cs.items():
+                hits, miss, fa = c["hit"], c["miss"], c["fa"]
+                n = hits + miss + fa + c["cn"]
+                board[source][str(lead_d)] = {
+                    "n": n,
+                    "pod": round(hits / (hits + miss), 3) if hits + miss else None,
+                    "far": round(fa / (hits + fa), 3) if hits + fa else None,
+                    "csi": round(hits / (hits + miss + fa), 3) if hits + miss + fa else None,
+                }
+            out[name] = dict(board)
+        return out
 
 
-def daily_series(con):
+class _Daily:
+    """Daily tmin/tmax/rain by lead day, Finland only. Hourly sources are
+    reduced to local-day extremes/sums with running min/max/sum per
+    (source, run_time, date) and scored as soon as a city's window is
+    complete, so nothing per-sample is retained: the old whole-table version
+    kept every hourly value of every snapshot in memory (~1 GB and growing
+    with each collection run), which is what pushed the nightly service past
+    its 2 GB MemoryMax on 2026-09-17.
+
+    foreca_daily is Foreca's native daily feed (vars tmin/tmax/rain keyed by
+    date): true daily extremes, a DIFFERENT predictand than hourly-sampled
+    extremes - scored for curiosity, excluded from claims."""
+
+    def __init__(self, con):
+        self.obs_daily = _obs_daily(con)
+        self.cells: dict = {}
+        self._reset()
+
+    def _reset(self):
+        self.hr_t: dict = {}     # (source, run_time, date) -> [n, min, max]
+        self.hr_r: dict = {}     # (source, run_time, date) -> [n, sum]
+        self.native: dict = {}   # (run_time, date) -> {var: value}
+
+    def feed(self, source, run_time, target_time, var, value):
+        """Every FI row whose target is not before its run (no hindsight)."""
+        if var == "t2m":
+            k = (source, run_time, _local_date(target_time))
+            a = self.hr_t.get(k)
+            if a is None:
+                self.hr_t[k] = [1, value, value]
+            else:
+                a[0] += 1
+                if value < a[1]:
+                    a[1] = value
+                if value > a[2]:
+                    a[2] = value
+        elif var == "rain1h":
+            k = (source, run_time, _local_date_hour_ending(target_time))
+            a = self.hr_r.get(k)
+            if a is None:
+                self.hr_r[k] = [1, value]
+            else:
+                a[0] += 1
+                a[1] += value
+        elif source == "foreca" and var in ("tmin", "tmax", "rain"):
+            self.native.setdefault((run_time, target_time), {})[var] = value
+
+    def flush(self, city):
+        """Score the accumulated groups of `city` (a complete run_time window)."""
+        fc: dict = {}
+        for (run_time, date), vals in self.native.items():
+            fc[("foreca_daily", run_time, date)] = vals
+        for (source, run_time, date), (n, lo, hi) in self.hr_t.items():
+            if n >= 23:
+                fc[(source, run_time, date)] = {"tmin": lo, "tmax": hi}
+        for (source, run_time, date), (n, total) in self.hr_r.items():
+            k = (source, run_time, date)
+            if n >= 23 and k in fc:
+                fc[k]["rain"] = total
+        for (source, run_time, date), vals in fc.items():
+            truth = self.obs_daily.get((city, date))
+            if truth is None:
+                continue
+            run_date = _utc(run_time).astimezone(HKI).strftime("%Y-%m-%d")
+            lead_d = (datetime.strptime(date, "%Y-%m-%d") - datetime.strptime(run_date, "%Y-%m-%d")).days
+            # d0 excluded: part of the day has already happened at snapshot time.
+            if lead_d < 1:
+                continue
+            for var in ("tmin", "tmax", "rain"):
+                if var in vals and var in truth:
+                    _stat(self.cells, (source, var, lead_d), vals[var] - truth[var])
+        self._reset()
+
+    def finish(self) -> dict:
+        out: dict = defaultdict(dict)
+        for (source, var, lead_d), s in _finish(self.cells).items():
+            out[source][f"{var}_d{lead_d}"] = s
+        return dict(out)
+
+
+def _obs_daily(con) -> dict:
     t_by_day: dict = defaultdict(list)
     r_by_day: dict = defaultdict(list)
     for c, t, var, v in con.execute("SELECT city, time, var, value FROM observations WHERE var IN ('t2m','rain1h')"):
@@ -278,61 +390,86 @@ def daily_series(con):
     for k, vs in r_by_day.items():
         if len(vs) >= 20 and k in obs_daily:
             obs_daily[k]["rain"] = sum(vs)
-
-    fc_daily: dict = {}
-    # Foreca's native daily feed: true daily extremes, a DIFFERENT predictand than
-    # hourly-sampled extremes - scored for curiosity, excluded from claims.
-    q = "SELECT city, run_time, target_time, var, value FROM forecasts WHERE source='foreca' AND var IN ('tmin','tmax','rain')"
-    for city, run_time, date, var, value in con.execute(q):
-        fc_daily.setdefault(("foreca_daily", city, run_time, date), {})[var] = value
-    hr_t: dict = defaultdict(list)
-    hr_r: dict = defaultdict(list)
-    q = "SELECT source, city, run_time, target_time, var, value FROM forecasts WHERE var IN ('t2m','rain1h')"
-    for source, city, run_time, target_time, var, value in con.execute(q):
-        # Daily boards are Finland-only; accumulating the other 18 cities here
-        # built ~1 GB of dicts that scoring then ignored - it is what pushed
-        # the nightly run into the 2 GB MemoryMax and got it OOM-killed.
-        if city not in FI_CITIES:
-            continue
-        # Feeds include already-elapsed hours of the snapshot day (analysis, not
-        # forecast) - grading on them would be hindsight. Mirror hourly_board's filter.
-        if _utc(target_time) < _utc(run_time):
-            continue
-        if var == "t2m":
-            hr_t[(source, city, run_time, _local_date(target_time))].append(value)
-        else:
-            hr_r[(source, city, run_time, _local_date_hour_ending(target_time))].append(value)
-    for k, vs in hr_t.items():
-        if len(vs) >= 23:
-            fc_daily[k] = {"tmin": min(vs), "tmax": max(vs)}
-    for k, vs in hr_r.items():
-        if len(vs) >= 23 and k in fc_daily:
-            fc_daily[k]["rain"] = sum(vs)
-    return obs_daily, fc_daily
+    return obs_daily
 
 
-def daily_board(con, obs_daily, fc_daily) -> dict:
-    cells: dict = {}
-    for (source, city, run_time, date), fc in fc_daily.items():
-        truth = obs_daily.get((city, date))
-        if truth is None:
-            continue
-        run_date = _utc(run_time).astimezone(HKI).strftime("%Y-%m-%d")
-        lead_d = (datetime.strptime(date, "%Y-%m-%d") - datetime.strptime(run_date, "%Y-%m-%d")).days
-        # d0 excluded: part of the day has already happened at snapshot time.
-        if lead_d < 1:
-            continue
-        for var in ("tmin", "tmax", "rain"):
-            if var in fc and var in truth:
-                _stat(cells, (source, var, lead_d), fc[var] - truth[var])
-    out: dict = defaultdict(dict)
-    for (source, var, lead_d), s in _finish(cells).items():
-        out[source][f"{var}_d{lead_d}"] = s
-    return dict(out)
+def run_windows(con, days: int = WINDOW_DAYS) -> list:
+    """Half-open [lo, hi) run_time ranges that together cover EVERY run: the
+    first starts at '' and the last ends at '~', so rows outside collect_log's
+    span (early runs) can never be skipped. ISO strings compare in time order."""
+    lo, hi = con.execute("SELECT min(run_time), max(run_time) FROM collect_log").fetchone()
+    if lo is None:
+        return [("", "~")]
+    edges = []
+    t, end = _utc(lo), _utc(hi)
+    while t <= end:
+        edges.append(t.strftime("%Y-%m-%dT%H:%MZ"))
+        t += timedelta(days=days)
+    bounds = ["", *edges[1:], "~"]
+    return list(zip(bounds, bounds[1:]))
 
 
-def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT):
+def walk_city(con, city, sources, windows, handlers, daily, pair_files):
+    """Read one city's rows via the primary key, one run_time window at a
+    time, derive the blends from each (run_time, target_time, var) group, and
+    feed every real and derived row to the boards. Rows reach each consumer
+    in (run_time, target_time, var) order, which for the pairwise files is
+    exactly the old index order (source, city, run_time, target_time)."""
+    obs_city = _obs_city(con, city)
+    intern = sys.intern
+    is_fi = city in FI_CITIES
+    q = ("SELECT run_time, target_time, var, value FROM forecasts"
+         " WHERE source=? AND city=? AND run_time>=? AND run_time<?")
+    for lo, hi in windows:
+        groups: dict = {}
+        for source in sources:
+            for run_time, target_time, var, value in con.execute(q, (source, city, lo, hi)):
+                k = (intern(run_time), intern(target_time), intern(var))
+                g = groups.get(k)
+                if g is None:
+                    g = groups[k] = {}
+                g[source] = value
+        lead_cache: dict = {}
+        for k in sorted(groups):
+            run_time, target_time, var = k
+            g = groups[k]
+            if var in BLEND_VARS:
+                for name, members in BLEND_DEFS:
+                    vals = [g[m] for m in members if m in g]
+                    if len(vals) >= MIN_MEMBERS:
+                        g[name] = sum(vals) / len(vals)
+            obs_var = obs_city.get(var)
+            truth = obs_var.get(target_time) if obs_var else None
+            hs = handlers.get(var)
+            if truth is not None and hs:
+                lead_d = lead_cache.get((run_time, target_time))
+                if lead_d is None:
+                    lead_d = lead_cache[(run_time, target_time)] = _lead_day(run_time, target_time)
+                if lead_d is not None:
+                    for source, value in g.items():
+                        for h in hs:
+                            h.feed(source, city, target_time, lead_d, value, truth, obs_city)
+                    if var == "t2m":
+                        for source in PAIR_SOURCES:
+                            if source in g and is_fi:
+                                pair_files[source].write(
+                                    f"{city}\t{run_time}\t{target_time}\t{g[source] - truth!r}\n")
+            if is_fi:
+                if var in ("t2m", "rain1h"):
+                    # Feeds include already-elapsed hours of the snapshot day
+                    # (analysis, not forecast) - grading them would be hindsight.
+                    if _utc(target_time) >= _utc(run_time):
+                        for source, value in g.items():
+                            daily.feed(source, run_time, target_time, var, value)
+                elif var in ("tmin", "tmax", "rain") and "foreca" in g:
+                    daily.feed("foreca", run_time, target_time, var, g["foreca"])
+        if is_fi:
+            daily.flush(city)
+
+
+def _block_bootstrap(agg_by_date: dict, block_len: int, n_boot: int = N_BOOT):
     """Circular moving-block bootstrap over consecutive local target dates.
+    agg_by_date: date -> per-date subtotals (sum|e_cand|, sum|e_comp|, n, ...).
 
     Returns (ci_lo, ci_hi, p_two_sided), or (None, None, None) when the
     resampling is DEGENERATE - with fewer distinct dates than the block length
@@ -341,7 +478,7 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
     overwhelming evidence when it actually means "not enough data to resample",
     so it must be reported as absent rather than as a number.
     """
-    dates = sorted(samples_by_date)
+    dates = sorted(agg_by_date)
     nd = len(dates)
     # Structural degeneracy: when the block is at least as long as the record,
     # one circular block already covers every date, so every draw is the same
@@ -354,14 +491,10 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
     n_blocks = max(1, math.ceil(nd / block_len))
     # A date always enters a draw whole, and the statistic is
     # (sum|e_cand| - sum|e_comp|) / n over the picked dates - so a date's
-    # per-date subtotals are sufficient. Aggregating once here makes a draw
-    # O(#dates) instead of O(#samples); at 200k+ pooled samples that is the
-    # difference between hours and seconds, with the same statistic.
-    agg = {d: (
-        sum(abs(ea) for ea, _ in ps),
-        sum(abs(eb) for _, eb in ps),
-        len(ps),
-    ) for d, ps in samples_by_date.items()}
+    # per-date subtotals are sufficient, and pairwise() only ever keeps those.
+    # A draw is O(#dates) instead of O(#samples); at 200k+ pooled samples that
+    # is the difference between hours and seconds, with the same statistic.
+    agg = {d: (a[0], a[1], a[2]) for d, a in agg_by_date.items()}
     diffs = []
     for _ in range(n_boot):
         picked = []
@@ -390,12 +523,12 @@ def _block_bootstrap(samples_by_date: dict, block_len: int, n_boot: int = N_BOOT
 
 
 def _summarize_pairs(by_date: dict) -> dict:
-    pairs = [p for ps in by_date.values() for p in ps]
-    n = len(pairs)
-    mae_a = sum(abs(a) for a, _ in pairs) / n
-    mae_b = sum(abs(b) for _, b in pairs) / n
-    wins = sum(1 for a, b in pairs if abs(a) < abs(b))
-    ties = sum(1 for a, b in pairs if abs(a) == abs(b))
+    """by_date: date -> [sum|e_cand|, sum|e_comp|, n, wins, ties]."""
+    n = sum(a[2] for a in by_date.values())
+    mae_a = sum(a[0] for a in by_date.values()) / n
+    mae_b = sum(a[1] for a in by_date.values()) / n
+    wins = sum(a[3] for a in by_date.values())
+    ties = sum(a[4] for a in by_date.values())
     lo, hi, p = _block_bootstrap(by_date, BLOCK_LEN)
     degenerate = p is None
     sens = {}
@@ -421,32 +554,55 @@ def _summarize_pairs(by_date: dict) -> dict:
     }
 
 
-def pairwise(con, cand: str, comp: str, var: str = "t2m", cities=FI_CITIES) -> dict:
-    """Matched samples: same city, same snapshot, same target hour."""
-    obs = _load_obs(con, var, cities)
-    errs: dict = defaultdict(dict)
-    q = "SELECT source, city, run_time, target_time, value FROM forecasts WHERE var=? AND source IN (?,?)"
-    for source, city, run_time, target_time, value in con.execute(q, (var, cand, comp)):
-        truth = obs.get((city, target_time))
-        if truth is None:
+def _pair(agg: dict, date: str, ea: float, eb: float):
+    a = agg.get(date)
+    if a is None:
+        a = agg[date] = [0.0, 0.0, 0, 0, 0]
+    aa, ab = abs(ea), abs(eb)
+    a[0] += aa
+    a[1] += ab
+    a[2] += 1
+    if aa < ab:
+        a[3] += 1
+    elif aa == ab:
+        a[4] += 1
+
+
+def _read_errors(path):
+    with open(path) as f:
+        for line in f:
+            city, run_time, target_time, err = line.rstrip("\n").split("\t")
+            yield city, run_time, target_time, float(err)
+
+
+def pairwise(files: dict, cand: str, comp: str) -> dict:
+    """Matched samples: same city, same snapshot, same target hour.
+
+    Memory is one float per candidate sample (keys interned: a few hundred
+    distinct run/target strings, not one copy per row) plus per-date subtotals;
+    the pairs themselves are never materialised. The previous version held a
+    dict of dicts for every sample of both sources plus every pair as a tuple,
+    ~0.5 GB per call, and grew with every collection run."""
+    intern = sys.intern
+    cand_err: dict = {}
+    for city, run_time, target_time, err in _read_errors(files[cand]):
+        cand_err[(intern(city), intern(run_time), intern(target_time))] = err
+    by_lead: dict = defaultdict(dict)   # lead_d -> date -> subtotals
+    pooled: dict = {}
+    for city, run_time, target_time, eb in _read_errors(files[comp]):
+        ea = cand_err.get((city, run_time, target_time))
+        if ea is None:
             continue
-        if _utc(target_time) < _utc(run_time):
-            continue
-        errs[(city, run_time, target_time)][source] = value - truth
-    by_lead: dict = defaultdict(lambda: defaultdict(list))
-    pooled: dict = defaultdict(list)
-    for (city, run_time, target_time), pair in errs.items():
-        if cand in pair and comp in pair:
-            lead_d = int((_utc(target_time) - _utc(run_time)).total_seconds() / 3600 // 24)
-            date = _local_date(target_time)
-            by_lead[lead_d][date].append((pair[cand], pair[comp]))
-            if 1 <= lead_d <= 7:
-                pooled[date].append((pair[cand], pair[comp]))
+        lead_d = int((_utc(target_time) - _utc(run_time)).total_seconds() / 3600 // 24)
+        date = _local_date(target_time)
+        _pair(by_lead[lead_d], date, ea, eb)
+        if 1 <= lead_d <= 7:
+            _pair(pooled, date, ea, eb)
     out = {}
     for lead_d, by_date in sorted(by_lead.items()):
-        if sum(len(v) for v in by_date.values()) >= 10 and len(by_date) >= 3:
+        if sum(a[2] for a in by_date.values()) >= 10 and len(by_date) >= 3:
             out[str(lead_d)] = _summarize_pairs(by_date)
-    if pooled and sum(len(v) for v in pooled.values()) >= 10 and len(pooled) >= 3:
+    if pooled and sum(a[2] for a in pooled.values()) >= 10 and len(pooled) >= 3:
         out["pooled_1_7"] = _summarize_pairs(pooled)
     return out
 
@@ -521,7 +677,7 @@ def print_pairwise(all_pairs: dict, title: str = "Pairwise inference", note: str
 
 def main():
     con = get_db()
-    n_runs = con.execute("SELECT count(DISTINCT run_time) FROM forecasts").fetchone()[0]
+    n_runs = con.execute("SELECT count(DISTINCT run_time) FROM collect_log").fetchone()[0]
     print(f"Scoring prospective data: {n_runs} collection runs in DB")
 
     # Scope map shared by every board pass. "fi" feeds the legacy top-level
@@ -530,26 +686,70 @@ def main():
               **{cc: cits for cc, cits in COUNTRY_CITIES.items() if cc != "fi"}}
     foreign = sorted(k for k in COUNTRY_CITIES if k != "fi")
 
-    t2m_all = hourly_boards(con, "t2m", {**scopes, "fi_q": FI_CITIES}, quantized={"fi_q"})
-    t2m, t2m_q = t2m_all["fi"], t2m_all["fi_q"]
-    ws_all = hourly_boards(con, "ws", scopes)
-    ws = ws_all["fi"]
-    rain_occ_all = rain_occurrence_boards(con, scopes)
-    rain_occ = rain_occ_all["fi"]
-    # Rain amount in mm/h. MAE over all hours is dominated by dry hours, so
-    # this rewards not-crying-wolf as much as nailing the downpour - fair, but
-    # a different question than occurrence CSI, hence a separate board.
-    rain_amt_all = hourly_boards(con, "rain1h", scopes)
-    rain_amt = rain_amt_all["fi"]
+    fi = {"fi": FI_CITIES}
+    t2m_h = _MAE({**scopes, "fi_q": FI_CITIES}, quantized={"fi_q"})
+    ws_h, rain_amt_h, cc_h = _MAE(scopes), _MAE(scopes), _MAE(scopes)
     # Extended exploratory boards (collection began 2026-08-22; they stay empty
-    # until forecast/observation overlap accrues, and hourly_boards copes).
-    cc_all = hourly_boards(con, "cc", scopes)
-    extended = {v: hourly_boards(con, v, {"fi": FI_CITIES})["fi"] for v in ("rh", "td", "gust", "pmsl")}
+    # until forecast/observation overlap accrues, and _MAE copes).
+    ext_h = {v: _MAE(fi) for v in ("rh", "td", "gust", "pmsl")}
+    wdir_h = _WindDir(fi)
+    cls_h = _CloudClass(fi)
+    occ_h = _RainOccurrence(scopes)
+    handlers = {
+        "t2m": [t2m_h], "ws": [ws_h],
+        # Rain amount in mm/h. MAE over all hours is dominated by dry hours, so
+        # this rewards not-crying-wolf as much as nailing the downpour - fair,
+        # but a different question than occurrence CSI, hence a separate board.
+        "rain1h": [rain_amt_h, occ_h],
+        "cc": [cc_h, cls_h], "wdir": [wdir_h],
+        **{v: [h] for v, h in ext_h.items()},
+    }
+    daily_h = _Daily(con)
+    # Real sources only: any blend_* rows a manual blend.py left behind are
+    # ignored, the blends are always derived fresh from the members.
+    sources = [src for src in _sources(con) if src not in BLEND_SOURCES and not src.startswith("blend_")]
+    windows = run_windows(con)
+    # Pairwise inference needs matched per-sample errors; they are spooled to
+    # one TSV per source (~60 MB, /tmp) during the walk and re-read per cell,
+    # so the 21 cells below never touch the table. repr() round-trips floats.
+    tmpdir = tempfile.mkdtemp(prefix="wb-pairwise-")
+    try:
+        files = {src: Path(tmpdir) / f"{src}.tsv" for src in PAIR_SOURCES}
+        pair_files = {src: open(path, "w") for src, path in files.items()}
+        try:
+            for city in sorted(ALL_CITIES):
+                walk_city(con, city, sources, windows, handlers, daily_h, pair_files)
+        finally:
+            for f in pair_files.values():
+                f.close()
+        pairs = {
+            (cand, comp): pairwise(files, cand, comp)
+            for cand in CANDIDATES for comp in COMPETITORS
+        }
+        blend_pairs = {
+            (cand, comp): pairwise(files, cand, comp)
+            for cand in BLENDS for comp in BLEND_COMPETITORS
+        }
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    apply_significance(pairs)
+    # Corrected within itself - a separate family, never merged with the above.
+    apply_significance(blend_pairs)
+
+    t2m_all = t2m_h.finish()
+    t2m, t2m_q = t2m_all["fi"], t2m_all["fi_q"]
+    ws_all = ws_h.finish()
+    ws = ws_all["fi"]
+    rain_occ_all = occ_h.finish()
+    rain_occ = rain_occ_all["fi"]
+    rain_amt_all = rain_amt_h.finish()
+    rain_amt = rain_amt_all["fi"]
+    cc_all = cc_h.finish()
+    extended = {v: h.finish()["fi"] for v, h in ext_h.items()}
     extended["cc"] = cc_all["fi"]
-    wdir = wind_direction_boards(con, {"fi": FI_CITIES})["fi"]
-    cloud_cls = cloud_class_boards(con, {"fi": FI_CITIES})["fi"]
-    obs_daily, fc_daily = daily_series(con)
-    daily = daily_board(con, obs_daily, fc_daily)
+    wdir = wdir_h.finish()["fi"]
+    cloud_cls = cls_h.finish()["fi"]
+    daily = daily_h.finish()
     countries = {
         cc: {
             "hourly_t2m": t2m_all[cc],
@@ -568,18 +768,6 @@ def main():
         }
         for name in ("rest", "all")
     }
-    pairs = {
-        (cand, comp): pairwise(con, cand, comp)
-        for cand in CANDIDATES for comp in COMPETITORS
-    }
-    apply_significance(pairs)
-    blend_pairs = {
-        (cand, comp): pairwise(con, cand, comp)
-        for cand in BLENDS for comp in BLEND_COMPETITORS
-    }
-    # Corrected within itself - a separate family, never merged with the above.
-    apply_significance(blend_pairs)
-
     print_board("Hourly t2m by lead day", t2m)
     print_board("Hourly t2m, ALL sources rounded to integers (quantization sensitivity)", t2m_q)
     print_board("Hourly wind speed by lead day", ws, unit="m/s MAE")
