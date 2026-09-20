@@ -98,6 +98,21 @@ pre-registered secondary cells. Their competitor set includes
 `ecmwf_aifs025_single`, because "beats Foreca" is a far weaker claim than
 "beats the best single model".
 
+**Wind and rain inference (added 2026-09-20, exploratory).** The blends are
+also tested against the same competitor set on hourly wind speed (MAE
+difference, same matched-pair block bootstrap as t2m) and on rain occurrence
+(CSI at >= 0.1 mm/h on matched hours; an MAE over mostly-dry hours rewards
+forecasting no rain, so occurrence skill is the meaningful claim). Wind and
+rain are Holm-corrected **together as one family** of their own - a "most
+accurate service" claim bundles them - and never touch the t2m families, so
+every temperature verdict stays exactly as it was. Rain cells carry
+`stat: "csi"` and `higher_better: true`: a POSITIVE diff means the candidate
+is better, the opposite sign convention from the MAE cells. Rain cells
+against Foreca inherit the provisional status of Foreca's rain field (see
+fairness notes). JSON keys: `pairwise_ws_blends_exploratory`,
+`pairwise_rain_blends_exploratory`; served by `/api/stats` as
+`pairwise_ws_blends` / `pairwise_rain_blends`.
+
 `blend.py` is now only an ad-hoc tool: run it when you want the blends as
 rows for SQL, then `blend.py --wipe-only` to delete them again. Since
 2026-09-20 the nightly chain never materialises them - writing and deleting

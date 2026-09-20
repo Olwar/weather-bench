@@ -96,6 +96,14 @@ BLEND_DEFS = [
 ]
 BLEND_SOURCES = frozenset(name for name, _ in BLEND_DEFS)
 PAIR_SOURCES = sorted({*CANDIDATES, *COMPETITORS, *BLENDS, *BLEND_COMPETITORS})
+# Extended-variable inference (added 2026-09-20, exploratory): the blends vs
+# the same competitor set on hourly wind speed (MAE, like t2m) and on rain
+# occurrence (CSI at RAIN_THR on matched hours - an MAE over mostly-dry hours
+# rewards forecasting no rain, so occurrence skill is the meaningful claim).
+# Wind and rain are corrected together as ONE Holm family of their own: a
+# "most accurate service" claim bundles them, and keeping them out of the
+# t2m families leaves every temperature verdict exactly as it was.
+PAIR_VARS = ("t2m", "ws", "rain1h")
 WINDOW_DAYS = 7    # run_time span held in memory at once, per city
 
 
@@ -449,11 +457,11 @@ def walk_city(con, city, sources, windows, handlers, daily, pair_files):
                     for source, value in g.items():
                         for h in hs:
                             h.feed(source, city, target_time, lead_d, value, truth, obs_city)
-                    if var == "t2m":
+                    if is_fi and var in PAIR_VARS:
                         for source in PAIR_SOURCES:
-                            if source in g and is_fi:
-                                pair_files[source].write(
-                                    f"{city}\t{run_time}\t{target_time}\t{g[source] - truth!r}\n")
+                            if source in g:
+                                pair_files[(var, source)].write(
+                                    f"{city}\t{run_time}\t{target_time}\t{g[source]!r}\t{truth!r}\n")
             if is_fi:
                 if var in ("t2m", "rain1h"):
                     # Feeds include already-elapsed hours of the snapshot day
@@ -467,9 +475,22 @@ def walk_city(con, city, sources, windows, handlers, daily, pair_files):
             daily.flush(city)
 
 
-def _block_bootstrap(agg_by_date: dict, block_len: int, n_boot: int = N_BOOT):
+def _stat_mae(t):
+    """(sum|e_cand|, sum|e_comp|, n) -> MAE difference; negative = cand better."""
+    return (t[0] - t[1]) / t[2] if t[2] else None
+
+
+def _stat_csi(t):
+    """(hit_a, miss_a, fa_a, hit_b, miss_b, fa_b, n) -> CSI difference;
+    positive = cand better. None when either side has no rain events at all."""
+    da, db = t[0] + t[1] + t[2], t[3] + t[4] + t[5]
+    return t[0] / da - t[3] / db if da and db else None
+
+
+def _block_bootstrap(agg_by_date: dict, block_len: int, stat=_stat_mae, n_boot: int = N_BOOT):
     """Circular moving-block bootstrap over consecutive local target dates.
-    agg_by_date: date -> per-date subtotals (sum|e_cand|, sum|e_comp|, n, ...).
+    agg_by_date: date -> per-date subtotal vector; stat() maps the summed
+    vector of a draw to the statistic (a date always enters a draw whole).
 
     Returns (ci_lo, ci_hi, p_two_sided), or (None, None, None) when the
     resampling is DEGENERATE - with fewer distinct dates than the block length
@@ -489,12 +510,11 @@ def _block_bootstrap(agg_by_date: dict, block_len: int, n_boot: int = N_BOOT):
         return None, None, None
     rng = random.Random(42)
     n_blocks = max(1, math.ceil(nd / block_len))
-    # A date always enters a draw whole, and the statistic is
-    # (sum|e_cand| - sum|e_comp|) / n over the picked dates - so a date's
-    # per-date subtotals are sufficient, and pairwise() only ever keeps those.
-    # A draw is O(#dates) instead of O(#samples); at 200k+ pooled samples that
-    # is the difference between hours and seconds, with the same statistic.
-    agg = {d: (a[0], a[1], a[2]) for d, a in agg_by_date.items()}
+    # A date's per-date subtotals are sufficient for the statistic, and
+    # pairwise only ever keeps those. A draw is O(#dates) instead of
+    # O(#samples); at 200k+ pooled samples that is the difference between
+    # hours and seconds, with the same statistic.
+    width = len(next(iter(agg_by_date.values())))
     diffs = []
     for _ in range(n_boot):
         picked = []
@@ -502,15 +522,14 @@ def _block_bootstrap(agg_by_date: dict, block_len: int, n_boot: int = N_BOOT):
             start = rng.randrange(nd)
             picked.extend(dates[(start + i) % nd] for i in range(block_len))
         picked = picked[:nd]
-        sum_a = sum_b = 0.0
-        n = 0
+        totals = [0] * width
         for d in picked:
-            sa, sb, cnt = agg[d]
-            sum_a += sa
-            sum_b += sb
-            n += cnt
-        if n:
-            diffs.append((sum_a - sum_b) / n)
+            a = agg_by_date[d]
+            for i in range(width):
+                totals[i] += a[i]
+        v = stat(totals)
+        if v is not None:
+            diffs.append(v)
     diffs.sort()
     if not diffs or diffs[0] == diffs[-1]:
         return None, None, None  # degenerate: zero variance across draws
@@ -554,6 +573,37 @@ def _summarize_pairs(by_date: dict) -> dict:
     }
 
 
+def _summarize_csi(by_date: dict) -> dict:
+    """by_date: date -> [hit_a, miss_a, fa_a, hit_b, miss_b, fa_b, n]."""
+    t = [0] * 7
+    for a in by_date.values():
+        for i in range(7):
+            t[i] += a[i]
+    csi_a = t[0] / (t[0] + t[1] + t[2]) if t[0] + t[1] + t[2] else None
+    csi_b = t[3] / (t[3] + t[4] + t[5]) if t[3] + t[4] + t[5] else None
+    lo, hi, p = _block_bootstrap(by_date, BLOCK_LEN, _stat_csi)
+    degenerate = p is None
+    sens = {}
+    for bl in (3, 7):
+        s_lo, s_hi, _ = _block_bootstrap(by_date, bl, _stat_csi)
+        sens[str(bl)] = None if s_lo is None else [round(s_lo, 3), round(s_hi, 3)]
+    return {
+        "n": t[6],
+        "days": len(by_date),
+        "stat": "csi",
+        "higher_better": True,   # unlike the MAE cells: positive diff = cand better
+        "csi_cand": None if csi_a is None else round(csi_a, 3),
+        "csi_comp": None if csi_b is None else round(csi_b, 3),
+        "diff": None if csi_a is None or csi_b is None else round(csi_a - csi_b, 3),
+        "wet_hours": t[0] + t[1],   # observed rain hours in the matched sample
+        "ci95": None if degenerate else [round(lo, 3), round(hi, 3)],
+        "ci95_block_sensitivity": sens,
+        "p": None if degenerate else round(p, 4),
+        "degenerate_bootstrap": degenerate,
+        "enough_days": len(by_date) >= MIN_DAYS,
+    }
+
+
 def _pair(agg: dict, date: str, ea: float, eb: float):
     a = agg.get(date)
     if a is None:
@@ -568,51 +618,112 @@ def _pair(agg: dict, date: str, ea: float, eb: float):
         a[4] += 1
 
 
-def _read_errors(path):
+def _read_rows(path):
     with open(path) as f:
         for line in f:
-            city, run_time, target_time, err = line.rstrip("\n").split("\t")
-            yield city, run_time, target_time, float(err)
+            city, run_time, target_time, value, truth = line.rstrip("\n").split("\t")
+            yield city, run_time, target_time, float(value), float(truth)
 
 
-def pairwise(files: dict, cand: str, comp: str) -> dict:
-    """Matched samples: same city, same snapshot, same target hour.
+def _lead_date(run_time, target_time):
+    lead_d = int((_utc(target_time) - _utc(run_time)).total_seconds() / 3600 // 24)
+    return lead_d, _local_date(target_time)
 
-    Memory is one float per candidate sample (keys interned: a few hundred
-    distinct run/target strings, not one copy per row) plus per-date subtotals;
-    the pairs themselves are never materialised. The previous version held a
+
+def load_candidate(path, kind: str) -> dict:
+    """(city, run_time, target_time) -> error (kind 'mae') or wet flag (kind
+    'csi') for one candidate source. Keys interned: a few hundred distinct
+    run/target strings, not one copy per row. Loaded once per candidate and
+    matched against each competitor's file."""
+    intern = sys.intern
+    out: dict = {}
+    for city, run_time, target_time, value, truth in _read_rows(path):
+        k = (intern(city), intern(run_time), intern(target_time))
+        out[k] = value - truth if kind == "mae" else value >= RAIN_THR
+    return out
+
+
+def _cells(by_lead: dict, pooled: dict, summarize, n_idx: int) -> dict:
+    """A cell prints only with >= 10 matched samples over >= 3 dates; n_idx
+    is where the sample count sits in the per-date vector (2 for the MAE
+    vectors, 6 for the CSI count vectors)."""
+    out = {}
+    for lead_d, by_date in sorted(by_lead.items()):
+        if sum(a[n_idx] for a in by_date.values()) >= 10 and len(by_date) >= 3:
+            out[str(lead_d)] = summarize(by_date)
+    if pooled and sum(a[n_idx] for a in pooled.values()) >= 10 and len(pooled) >= 3:
+        out["pooled_1_7"] = summarize(pooled)
+    return out
+
+
+def pairwise(cand_err: dict, comp_path) -> dict:
+    """Matched samples: same city, same snapshot, same target hour; MAE
+    difference. Memory is the candidate dict plus per-date subtotals; the
+    pairs themselves are never materialised. The previous version held a
     dict of dicts for every sample of both sources plus every pair as a tuple,
     ~0.5 GB per call, and grew with every collection run."""
-    intern = sys.intern
-    cand_err: dict = {}
-    for city, run_time, target_time, err in _read_errors(files[cand]):
-        cand_err[(intern(city), intern(run_time), intern(target_time))] = err
     by_lead: dict = defaultdict(dict)   # lead_d -> date -> subtotals
     pooled: dict = {}
-    for city, run_time, target_time, eb in _read_errors(files[comp]):
+    for city, run_time, target_time, value, truth in _read_rows(comp_path):
         ea = cand_err.get((city, run_time, target_time))
         if ea is None:
             continue
-        lead_d = int((_utc(target_time) - _utc(run_time)).total_seconds() / 3600 // 24)
-        date = _local_date(target_time)
+        eb = value - truth
+        lead_d, date = _lead_date(run_time, target_time)
         _pair(by_lead[lead_d], date, ea, eb)
         if 1 <= lead_d <= 7:
             _pair(pooled, date, ea, eb)
+    return _cells(by_lead, pooled, _summarize_pairs, 2)
+
+
+def _count(agg: dict, date: str, a: bool, b: bool, ob: bool):
+    c = agg.get(date)
+    if c is None:
+        c = agg[date] = [0, 0, 0, 0, 0, 0, 0]
+    if ob:
+        c[0 if a else 1] += 1
+        c[3 if b else 4] += 1
+    else:
+        if a:
+            c[2] += 1
+        if b:
+            c[5] += 1
+    c[6] += 1
+
+
+def pairwise_csi(cand_wet: dict, comp_path) -> dict:
+    """Rain occurrence on matched hours: hit/miss/false-alarm counts per date
+    for both sources, CSI difference with the same block bootstrap."""
+    by_lead: dict = defaultdict(dict)
+    pooled: dict = {}
+    for city, run_time, target_time, value, truth in _read_rows(comp_path):
+        a = cand_wet.get((city, run_time, target_time))
+        if a is None:
+            continue
+        b, ob = value >= RAIN_THR, truth >= RAIN_THR
+        lead_d, date = _lead_date(run_time, target_time)
+        _count(by_lead[lead_d], date, a, b, ob)
+        if 1 <= lead_d <= 7:
+            _count(pooled, date, a, b, ob)
+    return _cells(by_lead, pooled, _summarize_csi, 6)
+
+
+def family(files: dict, var: str, cands, comps, kind: str = "mae") -> dict:
+    """{(cand, comp): cells} for one variable; each candidate file is loaded once."""
     out = {}
-    for lead_d, by_date in sorted(by_lead.items()):
-        if sum(a[2] for a in by_date.values()) >= 10 and len(by_date) >= 3:
-            out[str(lead_d)] = _summarize_pairs(by_date)
-    if pooled and sum(a[2] for a in pooled.values()) >= 10 and len(pooled) >= 3:
-        out["pooled_1_7"] = _summarize_pairs(pooled)
+    for cand in cands:
+        cand_map = load_candidate(files[(var, cand)], kind)
+        for comp in comps:
+            out[(cand, comp)] = (pairwise if kind == "mae" else pairwise_csi)(cand_map, files[(var, comp)])
     return out
 
 
 def apply_significance(pairs: dict):
     """Primary endpoint tested at ALPHA; all other cells Holm-corrected."""
     tests = []
-    for (cand, comp), leads in pairs.items():
+    for key, leads in pairs.items():
         for lead, s in leads.items():
-            s["primary"] = (cand, comp, lead) == PRIMARY
+            s["primary"] = (*key, lead) == PRIMARY
             if not s["enough_days"] or s["p"] is None:
                 s["significant"] = None  # insufficient data for any inference
             elif s["primary"]:
@@ -653,26 +764,37 @@ def print_board(title, results, unit="degC MAE", higher_better=False):
         print(row)
 
 
-def print_pairwise(all_pairs: dict, title: str = "Pairwise inference", note: str = ""):
-    print(f"\n=== {title} (hourly t2m, matched pairs, block bootstrap) ===")
-    print(f"negative diff = candidate better; PRIMARY = pre-registered endpoint;")
+def print_pairwise(all_pairs: dict, title: str = "Pairwise inference", note: str = "",
+                   var: str = "t2m", stat: str = "mae"):
+    print(f"\n=== {title} (hourly {var}, matched pairs, block bootstrap) ===")
+    if stat == "mae":
+        print(f"negative diff = candidate better; PRIMARY = pre-registered endpoint;")
+    else:
+        print(f"CSI at >={RAIN_THR} mm/h; POSITIVE diff = candidate better;")
     print(f"sig requires >={MIN_DAYS} distinct days; secondary cells Holm-corrected")
     if note:
         print(note)
-    for (cand, comp), leads in all_pairs.items():
+    for key, leads in all_pairs.items():
+        cand, comp = key[-2], key[-1]
         print(f"\n{cand} vs {comp}:")
         if not leads:
             print("  not enough matched data yet")
             continue
-        print(f"{'lead':>10}{'n':>7}{'days':>6}{'cand':>7}{'comp':>7}{'diff':>7}{'CI95':>18}{'p':>8}{'win%':>6}  sig")
+        tail = "win%" if stat == "mae" else "wet"
+        print(f"{'lead':>10}{'n':>7}{'days':>6}{'cand':>7}{'comp':>7}{'diff':>7}{'CI95':>18}{'p':>8}{tail:>6}  sig")
         for lead, s in leads.items():
             # too few distinct dates to resample -> no interval, no p-value
             ci = "-" if s["ci95"] is None else f"[{s['ci95'][0]:+.2f},{s['ci95'][1]:+.2f}]"
             pv = "-" if s["p"] is None else f"{s['p']:.4f}"
             sig = {True: "YES", False: "no", None: "n/a"}[s["significant"]]
             tag = " *PRIMARY*" if s["primary"] else ""
-            print(f"{lead:>10}{s['n']:>7}{s['days']:>6}{s['mae_cand']:>7.2f}{s['mae_comp']:>7.2f}"
-                  f"{s['diff']:>+7.2f}{ci:>18}{pv:>8}{100*s['win_rate']:>6.0f}  {sig}{tag}")
+            if stat == "mae":
+                a, b, extra = s["mae_cand"], s["mae_comp"], f"{100*s['win_rate']:>6.0f}"
+            else:
+                a, b, extra = s["csi_cand"] or 0.0, s["csi_comp"] or 0.0, f"{s['wet_hours']:>6}"
+            d = s["diff"] if s["diff"] is not None else 0.0
+            print(f"{lead:>10}{s['n']:>7}{s['days']:>6}{a:>7.2f}{b:>7.2f}"
+                  f"{d:>+7.2f}{ci:>18}{pv:>8}{extra}  {sig}{tag}")
 
 
 def main():
@@ -714,27 +836,29 @@ def main():
     # so the 21 cells below never touch the table. repr() round-trips floats.
     tmpdir = tempfile.mkdtemp(prefix="wb-pairwise-")
     try:
-        files = {src: Path(tmpdir) / f"{src}.tsv" for src in PAIR_SOURCES}
-        pair_files = {src: open(path, "w") for src, path in files.items()}
+        files = {(var, src): Path(tmpdir) / f"{var}_{src}.tsv" for var in PAIR_VARS for src in PAIR_SOURCES}
+        pair_files = {k: open(path, "w") for k, path in files.items()}
         try:
             for city in sorted(ALL_CITIES):
                 walk_city(con, city, sources, windows, handlers, daily_h, pair_files)
         finally:
             for f in pair_files.values():
                 f.close()
-        pairs = {
-            (cand, comp): pairwise(files, cand, comp)
-            for cand in CANDIDATES for comp in COMPETITORS
-        }
-        blend_pairs = {
-            (cand, comp): pairwise(files, cand, comp)
-            for cand in BLENDS for comp in BLEND_COMPETITORS
+        pairs = family(files, "t2m", CANDIDATES, COMPETITORS)
+        blend_pairs = family(files, "t2m", BLENDS, BLEND_COMPETITORS)
+        # Wind + rain: one exploratory family for the blends, see PAIR_VARS.
+        ext_pairs = {
+            **{("ws", *k): v for k, v in family(files, "ws", BLENDS, BLEND_COMPETITORS).items()},
+            **{("rain", *k): v for k, v in family(files, "rain1h", BLENDS, BLEND_COMPETITORS, "csi").items()},
         }
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     apply_significance(pairs)
     # Corrected within itself - a separate family, never merged with the above.
     apply_significance(blend_pairs)
+    apply_significance(ext_pairs)
+    ws_pairs = {k[1:]: v for k, v in ext_pairs.items() if k[0] == "ws"}
+    rain_pairs = {k[1:]: v for k, v in ext_pairs.items() if k[0] == "rain"}
 
     t2m_all = t2m_h.finish()
     t2m, t2m_q = t2m_all["fi"], t2m_all["fi_q"]
@@ -788,6 +912,13 @@ def main():
     if any(blend_pairs.values()):
         print_pairwise(blend_pairs, "Pairwise inference: derived blends (EXPLORATORY)",
                        "conceived after seeing the data - Holm-corrected as a separate family")
+    if any(ws_pairs.values()):
+        print_pairwise(ws_pairs, "Pairwise inference: blends, wind speed (EXPLORATORY)",
+                       "wind + rain are Holm-corrected together as one family", var="ws")
+    if any(rain_pairs.values()):
+        print_pairwise(rain_pairs, "Pairwise inference: blends, rain occurrence (EXPLORATORY)",
+                       "wind + rain are Holm-corrected together as one family; Foreca rain is provisional (README)",
+                       var="rain1h", stat="csi")
 
     (DATA_DIR / "prospective_results.json").write_text(json.dumps({
         "hourly_t2m": t2m, "hourly_t2m_quantized": t2m_q, "hourly_ws": ws,
@@ -799,8 +930,14 @@ def main():
         "pairwise_t2m": {f"{a}__vs__{b}": v for (a, b), v in pairs.items()},
         "pairwise_t2m_blends_exploratory": {
             f"{a}__vs__{b}": v for (a, b), v in blend_pairs.items()},
+        "pairwise_ws_blends_exploratory": {
+            f"{a}__vs__{b}": v for (a, b), v in ws_pairs.items()},
+        "pairwise_rain_blends_exploratory": {
+            f"{a}__vs__{b}": v for (a, b), v in rain_pairs.items()},
         "config": {"block_len": BLOCK_LEN, "min_days": MIN_DAYS, "alpha": ALPHA,
-                   "primary": list(PRIMARY), "n_boot": N_BOOT},
+                   "primary": list(PRIMARY), "n_boot": N_BOOT, "rain_thr": RAIN_THR,
+                   "families": ["pairwise_t2m", "pairwise_t2m_blends_exploratory",
+                                "pairwise_ws_blends_exploratory + pairwise_rain_blends_exploratory"]},
     }, indent=2))
     print(f"\nSaved {DATA_DIR / 'prospective_results.json'}")
 
