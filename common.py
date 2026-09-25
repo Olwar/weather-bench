@@ -5,6 +5,7 @@ Daily aggregation (tmin/tmax) is done over Europe/Helsinki local days in score.p
 """
 import json
 import os
+import re
 import sqlite3
 import time
 import urllib.parse
@@ -95,7 +96,10 @@ def http_get(url: str, tries: int = 3, sleep: float = 2.0, timeout: float = 60) 
         except Exception as e:  # noqa: BLE001 - retry any transport error
             last = e
             time.sleep(sleep * (i + 1))
-    raise RuntimeError(f"GET failed after {tries} tries: {url}") from last
+    # Never echo a credential: Google's key rides in the query string, and this
+    # message lands in the journal, collect_log and every backup of it.
+    safe = re.sub(r"([?&]key=)[^&]+", r"\1***", url)
+    raise RuntimeError(f"GET failed after {tries} tries: {safe}") from last
 
 
 def http_json(url: str, tries: int = 3, sleep: float = 2.0, timeout: float = 60) -> dict:
