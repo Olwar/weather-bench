@@ -176,6 +176,16 @@ pre-registered t2m primary is untouched. Method notes:
   memory. They are derived data; keeping ~7M of them all day inflated DB
   growth and backups ~40%, and rebuilding them nightly cost 2.5 h.
 
+## Rain radar on the site (added 2026-09-29)
+
+Finland only. The page shows the last two hours of FMI's open-data rain-rate
+composite (`suomi_rr_eureffin`, CC BY 4.0) as 13 frames at 10-minute steps on
+a MapLibre map (OpenFreeMap basemap, MapLibre vendored under
+`web/static/vendor/`). `/api/radar` returns the frame times; the images come
+straight from FMI's WMS as one Web-Mercator GetMap per frame and view, so a
+visit costs FMI 13 requests, not hundreds of tiles. No nowcast: FMI publishes
+none on the WMS, and the radar is display-only - it feeds no score.
+
 ## International expansion (added 2026-08-26: SE, DK, DE, US)
 
 18 cities in four countries joined the benchmark. Verification truth outside

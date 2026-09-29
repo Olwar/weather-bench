@@ -21,16 +21,18 @@ are the same estimator.
 """
 import json
 import os
+import re
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from common import http_json, fmi_simple, OM_MODELS
+from common import http_get, http_json, fmi_simple, OM_MODELS
 
 DATA_DIR = Path(os.environ.get("WEATHERBENCH_DATA", "/opt/weather-bench/data"))
 STATIC = Path(__file__).parent / "static"
@@ -262,6 +264,37 @@ def stats():
         "generated": f.stat().st_mtime,
         "labels": MEMBER_LABELS,
     })
+
+
+# FMI open-data radar: the Finland rain-rate composite (suomi_rr_eureffin,
+# 5-minute steps, CC BY 4.0). The page draws the frames straight from FMI's
+# WMS in Web Mercator; this endpoint only spares every visitor the ~400 KB
+# capabilities document, which is the sole way to learn the latest frame.
+RADAR_WMS = "https://openwms.fmi.fi/geoserver/Radar/wms"
+RADAR_LAYER = "Radar:suomi_rr_eureffin"
+RADAR_FRAMES = 13        # 2 h at 10-minute steps, newest last
+RADAR_STEP_MIN = 10
+_RADAR = {"t": 0.0, "data": None}
+
+
+@app.get("/api/radar")
+def radar():
+    now = time.time()
+    if _RADAR["data"] is None or now - _RADAR["t"] > 120:
+        try:
+            xml = http_get(f"{RADAR_WMS}?service=WMS&version=1.3.0&request=GetCapabilities", timeout=30)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"radar capabilities unavailable: {e}")
+        m = re.search(r"<Name>suomi_rr_eureffin</Name>.*?<Dimension[^>]*>([^<]+)</Dimension>", xml, re.S)
+        if not m:
+            raise HTTPException(502, "radar capabilities unreadable")
+        _, end, _ = m.group(1).strip().split("/")
+        latest = datetime.strptime(end, "%Y-%m-%dT%H:%M:%S.%fZ")
+        times = [(latest - timedelta(minutes=RADAR_STEP_MIN * i)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                 for i in range(RADAR_FRAMES - 1, -1, -1)]
+        _RADAR.update(t=now, data={"wms": RADAR_WMS, "layer": RADAR_LAYER, "times": times,
+                                   "attribution": "Ilmatieteen laitos, CC BY 4.0"})
+    return JSONResponse(_RADAR["data"], headers={"Cache-Control": "public, max-age=60"})
 
 
 @app.get("/api/health")

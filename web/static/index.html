@@ -133,6 +133,22 @@ nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;pos
 .hr .r{font-size:11.5px;color:var(--cold);min-height:15px}
 .hr.nowh{background:rgba(24,21,19,.06)}
 
+/* ═══ rain radar (FMI open data, Finland only) ═══ */
+.radar-map{height:min(440px,62vw);border-radius:16px;overflow:hidden;border:1px solid var(--rule);background:var(--paper-2)}
+.radar-map .maplibregl-ctrl-attrib{display:none}
+.radar-ctl{display:flex;align-items:center;gap:14px}
+.radar-ctl button{width:34px;height:34px;border-radius:50%;border:1px solid var(--rule-2);background:var(--paper);
+  color:var(--ink);cursor:pointer;font-size:13px;display:grid;place-items:center;transition:background .15s}
+.radar-ctl button:hover{background:var(--paper-2)}
+.radar-ctl button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.radar-ctl .rtime{font-family:var(--display);font-style:italic;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:5ch}
+.radar-ctl .rtime.live::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--cold);margin-right:8px;vertical-align:middle}
+.radar input[type=range]{width:100%;margin:14px 0 0;accent-color:var(--ink);cursor:pointer}
+.radar-foot{margin-top:10px;font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.radar-foot .lg{display:inline-flex;align-items:center;gap:6px}
+.radar-foot .lg i{display:inline-block;width:14px;height:8px;border-radius:2px}
+.radar .load{padding:0}
+
 /* ═══ sections ═══ */
 section{padding:clamp(26px,4.5vw,44px) 0 0}
 .label{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:16px}
@@ -273,6 +289,19 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
 
 <div class="wrap">
 
+<section class="radar" id="radarSec" hidden>
+  <div class="plot-hd">
+    <div class="label" id="radarLabel">Rain radar · last 2 hours</div>
+    <div class="radar-ctl"><button id="radarPlay" aria-label="Play">▶</button><span class="rtime" id="radarTime">–</span></div>
+  </div>
+  <div class="radar-map" id="radarMap"><div class="load">loading…</div></div>
+  <input type="range" id="radarSlider" min="0" max="12" value="12" step="1" aria-label="Radar frame">
+  <div class="radar-foot">
+    <span id="radarLegend"></span>
+    <span id="radarAttr">Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors</span>
+  </div>
+</section>
+
 <section>
   <div class="plot-hd">
     <div class="label" id="chartLabel">Next 7 days · the shaded band shows how much the models disagree</div>
@@ -310,6 +339,9 @@ const I18N={
 en:{
   searchPh:"Search any place…",
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
+  radarLabel:"Rain radar · last 2 hours", radarPlay:"Play", radarPause:"Pause", radarNow:"latest",
+  radarLegend:["light","moderate","heavy"],
+  radarAttr:"Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
   trustMeta:"Verified against real weather stations · open the numbers",
@@ -352,6 +384,9 @@ en:{
 fi:{
   searchPh:"Hae mikä tahansa paikka…",
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
+  radarLabel:"Sadetutka · viimeiset 2 tuntia", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin",
+  radarLegend:["heikkoa","kohtalaista","rankkaa"],
+  radarAttr:"Tutka: Ilmatieteen laitos (CC BY 4.0) · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
   trustMeta:"Todennettu oikeilla sääasemilla · avaa luvut",
@@ -399,6 +434,9 @@ function applyStatic(){
   document.documentElement.lang=LANG;
   $("#q").placeholder=L.searchPh;
   $("#chartLabel").textContent=L.chartLabel;
+  $("#radarLabel").textContent=L.radarLabel;$("#radarAttr").textContent=L.radarAttr;
+  $("#radarLegend").innerHTML=[["#5CC8E8",0],["#3AA657",1],["#E8B03A",2]].map(([c,i])=>`<span class="lg"><i style="background:${c}"></i>${L.radarLegend[i]}</span>`).join(" ");
+  if(window._radarSync)window._radarSync();
   $("#twoWeeks").textContent=L.twoWeeks;
   $("#trustmeta").textContent=L.trustMeta;
   $("#footerTxt").textContent=L.footer;
@@ -487,6 +525,7 @@ async function load(lat,lon,name,sub){
     const r=await fetch(`/api/forecast?lat=${lat}&lon=${lon}`);
     if(!r.ok)throw new Error("upstream "+r.status);
     CUR=await r.json();paint();
+    radar();
     if(!PAGE.city)document.title=(LANG==="fi"?`Sää ${name} – Ilma`:`${name} weather – Ilma`);
   }catch(e){$("#chart").className="bad";$("#chart").textContent=L.loadFail+e.message}
 }
@@ -589,6 +628,99 @@ function week(hs){
       <div class="mn">${Math.min(...t).toFixed(0)}°</div>
       <div class="rn">${r>=.1?r.toFixed(1)+" mm":""}</div></div>`}).join("");
 }
+/* ═══ rain radar: FMI's Finland composite, drawn by MapLibre on an OpenFreeMap
+   basemap. Frames are single WMS images per view (13 requests per place,
+   not hundreds of tiles); the last frame is the newest radar scan. ═══ */
+const RADAR={map:null,frames:[],idx:0,timer:null,lib:null,key:null};
+const inFinland=(lat,lon)=>lat>=59.5&&lat<=70.5&&lon>=19&&lon<=32;
+function loadLib(){
+  if(RADAR.lib)return RADAR.lib;
+  RADAR.lib=new Promise((res,rej)=>{
+    const l=document.createElement("link");l.rel="stylesheet";l.href="/static/vendor/maplibre-gl.css";document.head.appendChild(l);
+    const sc=document.createElement("script");sc.src="/static/vendor/maplibre-gl.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);
+  });
+  return RADAR.lib;
+}
+const merc=(lon,lat)=>[lon*20037508.34/180,Math.log(Math.tan((90+lat)*Math.PI/360))/(Math.PI/180)*20037508.34/180];
+function radarView(){
+  const m=RADAR.map,b=m.getBounds(),c=m.getCanvas();
+  const [x0,y0]=merc(b.getWest(),b.getSouth()),[x1,y1]=merc(b.getEast(),b.getNorth());
+  const w=Math.min(1200,c.width),h=Math.round(w*c.height/c.width);
+  return {bbox:`${x0},${y0},${x1},${y1}`,w,h,
+    coords:[[b.getWest(),b.getNorth()],[b.getEast(),b.getNorth()],[b.getEast(),b.getSouth()],[b.getWest(),b.getSouth()]]};
+}
+function frameUrl(d,t,v){
+  return `${d.wms}?service=WMS&version=1.1.1&request=GetMap&layers=${d.layer}&styles=&format=image/png&transparent=true`+
+    `&srs=EPSG:3857&width=${v.w}&height=${v.h}&bbox=${v.bbox}&time=${t}`;
+}
+function radarShow(i){
+  RADAR.idx=i;
+  RADAR.frames.forEach((f,j)=>{if(RADAR.map.getLayer(f.id))RADAR.map.setPaintProperty(f.id,"raster-opacity",j===i?.78:0)});
+  const t=RADAR.frames[i].t,d=new Date(t);
+  const el=$("#radarTime");
+  el.textContent=d.toLocaleTimeString(L.locale,{hour:"2-digit",minute:"2-digit"});
+  el.classList.toggle("live",i===RADAR.frames.length-1);
+  $("#radarSlider").value=i;
+}
+function radarStop(){clearInterval(RADAR.timer);RADAR.timer=null;$("#radarPlay").textContent="▶";$("#radarPlay").setAttribute("aria-label",L.radarPlay)}
+function radarPlay(){
+  if(RADAR.timer){radarStop();return}
+  $("#radarPlay").textContent="❚❚";$("#radarPlay").setAttribute("aria-label",L.radarPause);
+  let hold=0;
+  RADAR.timer=setInterval(()=>{
+    if(hold>0){hold--;return}
+    const n=(RADAR.idx+1)%RADAR.frames.length;
+    if(n===0)hold=0;
+    radarShow(n);
+    if(n===RADAR.frames.length-1)hold=3;   /* linger on the newest frame */
+  },450);
+}
+function radarRefresh(d){
+  const v=radarView();
+  RADAR.frames.forEach(f=>{const src=RADAR.map.getSource(f.id);
+    if(src)src.updateImage({url:frameUrl(d,f.t,v),coordinates:v.coords})});
+}
+async function radar(){
+  const sec=$("#radarSec");
+  if(!CUR||!inFinland(CUR.lat,CUR.lon)){sec.hidden=true;radarStop();return}
+  sec.hidden=false;
+  try{
+    await loadLib();
+    const d=await (await fetch("/api/radar")).json();
+    const key=`${CUR.lat.toFixed(3)},${CUR.lon.toFixed(3)}|${d.times[d.times.length-1]}`;
+    if(RADAR.map&&RADAR.key===key)return;
+    if(!RADAR.map){
+      $("#radarMap").innerHTML="";
+      const m=new maplibregl.Map({container:"radarMap",style:"https://tiles.openfreemap.org/styles/positron",
+        center:[CUR.lon,CUR.lat],zoom:6.6,minZoom:4.5,maxZoom:9,attributionControl:false,
+        dragRotate:false,pitchWithRotate:false,touchPitch:false,cooperativeGestures:true});
+      m.touchZoomRotate.disableRotation();
+      RADAR.map=m;
+      await new Promise(res=>m.once("load",res));
+      m.on("moveend",()=>{if(RADAR.d)radarRefresh(RADAR.d)});
+      $("#radarPlay").onclick=radarPlay;
+      $("#radarSlider").oninput=e=>{radarStop();radarShow(+e.target.value)};
+      RADAR.marker=new maplibregl.Marker({color:"#181513",scale:.8}).setLngLat([CUR.lon,CUR.lat]).addTo(m);
+    }else{
+      RADAR.map.jumpTo({center:[CUR.lon,CUR.lat],zoom:6.6});
+      if(RADAR.marker)RADAR.marker.setLngLat([CUR.lon,CUR.lat]);
+    }
+    const m=RADAR.map;RADAR.d=d;
+    radarStop();
+    RADAR.frames.forEach(f=>{if(m.getLayer(f.id))m.removeLayer(f.id);if(m.getSource(f.id))m.removeSource(f.id)});
+    const v=radarView();
+    RADAR.frames=d.times.map((t,i)=>({t,id:`radar${i}`}));
+    RADAR.frames.forEach(f=>{
+      m.addSource(f.id,{type:"image",url:frameUrl(d,f.t,v),coordinates:v.coords});
+      m.addLayer({id:f.id,type:"raster",source:f.id,paint:{"raster-opacity":0,"raster-opacity-transition":{duration:0},"raster-resampling":"nearest"}});
+    });
+    $("#radarSlider").max=RADAR.frames.length-1;
+    RADAR.key=key;
+    radarShow(RADAR.frames.length-1);
+  }catch(e){$("#radarMap").innerHTML=`<div class="load">${L.statsFail}</div>`}
+}
+window._radarSync=()=>{if(RADAR.frames.length&&RADAR.map)radarShow(RADAR.idx)};
+
 /* trust strip */
 const NICE=s=>L.nice[s]||s;
 
