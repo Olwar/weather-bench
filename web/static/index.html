@@ -636,8 +636,8 @@ const inFinland=(lat,lon)=>lat>=59.5&&lat<=70.5&&lon>=19&&lon<=32;
 function loadLib(){
   if(RADAR.lib)return RADAR.lib;
   RADAR.lib=new Promise((res,rej)=>{
-    const l=document.createElement("link");l.rel="stylesheet";l.href="/static/vendor/maplibre-gl.css";document.head.appendChild(l);
-    const sc=document.createElement("script");sc.src="/static/vendor/maplibre-gl.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);
+    const l=document.createElement("link");l.rel="stylesheet";l.href="/vendor/maplibre-gl.css";document.head.appendChild(l);
+    const sc=document.createElement("script");sc.src="/vendor/maplibre-gl.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);
   });
   return RADAR.lib;
 }

@@ -318,3 +318,6 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+# Vercel serves web/static as the site root, so the page addresses the
+# vendored MapLibre as /vendor/...; the origin must answer the same path.
+app.mount("/vendor", StaticFiles(directory=STATIC / "vendor"), name="vendor")
