@@ -3,8 +3,8 @@
 Every 5 minutes (systemd timer):
   1. Ask FMI's WFS for the newest composite times and fetch the raw 16-bit
      GeoTIFFs (EPSG:3067, 1 km, hundredths of mm/h; 65535 = outside coverage)
-     for t, t-5 and t-10 min, plus whatever the past hour still needs. Raw
-     frames are cached under data/nowcast/raw so a run fetches one new file.
+     for t, t-5 and t-10 min. Raw frames are cached under data/nowcast/raw so
+     a run fetches one new file.
   2. Estimate the motion field with dense optical flow (Farneback) between
      consecutive frames on a log-rain image, average the two fields, fill the
      rain-free areas with the intensity-weighted mean motion and smooth.
@@ -12,8 +12,8 @@ Every 5 minutes (systemd timer):
      constant velocity) for +10 .. +60 min. This is Lagrangian persistence,
      the same first-order method behind the national services' 0-2 h views:
      good for fronts and bands, blind to showers that form or die in place.
-  4. Reproject past and future frames to Web Mercator, colour them with a
-     fixed rain-rate palette and write PNGs + index.json for the site.
+  4. Reproject the newest scan and the future frames to Web Mercator, colour
+     them with a fixed rain-rate palette and write PNGs + index.json.
 
 Output: data/nowcast/index.json, data/nowcast/<stamp>.png. Read by web/app.py
 (/api/nowcast). Display-only: nothing here feeds a score. Runs in ~15 s.
@@ -46,8 +46,8 @@ LAYER = "Radar:suomi_rr_eureffin"
 BBOX = (-118331.366, 6335621.167, 875567.732, 7907751.537)   # composite extent, EPSG:3067
 W, H = 994, 1572                                             # 1 km cells
 STEP = 5                                                     # composite cadence, minutes
-PAST = [-50, -40, -30, -20, -10, 0]
-FUTURE = [10, 20, 30, 40, 50, 60]
+PAST = [0]                                                   # the newest scan anchors the loop
+FUTURE = list(range(5, 65, 5))                               # next hour, 5-minute steps
 OUT = DATA_DIR / "nowcast"
 RAW = OUT / "raw"
 KEEP_RAW = 16
@@ -203,7 +203,7 @@ def main():
         render(advect(frames[now], v, lead / STEP), maps, OUT / name)
         out_frames.append({"t": _iso(t), "lead_min": lead, "file": name, "kind": "nowcast"})
         keep.add(name)
-    index = {"latest": _iso(now), "generated": _iso(datetime.now(timezone.utc)), "step_min": 10,
+    index = {"latest": _iso(now), "generated": _iso(datetime.now(timezone.utc)), "step_min": STEP,
              "bbox_lnglat": {"w": w, "s": s, "e": e, "n": n},
              "mean_speed_kmh": round(speed, 1), "frames": out_frames,
              "attribution": "Ilmatieteen laitos (CC BY 4.0); nowcast by Ilma"}

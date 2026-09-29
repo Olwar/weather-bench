@@ -297,7 +297,7 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
     <div class="radar-ctl"><button id="radarPlay" aria-label="Play">▶</button><span class="rtime" id="radarTime">–</span></div>
   </div>
   <div class="radar-map" id="radarMap"><div class="load">loading…</div></div>
-  <input type="range" id="radarSlider" min="0" max="12" value="12" step="1" aria-label="Radar frame">
+  <input type="range" id="radarSlider" min="0" max="12" value="0" step="1" aria-label="Radar frame">
   <div class="radar-foot">
     <span id="radarLegend"></span>
     <span id="radarAttr">Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors</span>
@@ -341,9 +341,9 @@ const I18N={
 en:{
   searchPh:"Search any place…",
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
-  radarLabel:"Rain radar · past hour, and the next hour as our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
+  radarLabel:"Rain radar · the next hour, our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
-  radarAttr:"Radar: Finnish Meteorological Institute (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
+  radarAttr:"Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
   trustMeta:"Verified against real weather stations · open the numbers",
@@ -386,9 +386,9 @@ en:{
 fi:{
   searchPh:"Hae mikä tahansa paikka…",
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
-  radarLabel:"Sadetutka · tunti taakse, ja tunti eteen meidän arviona", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
+  radarLabel:"Sadetutka · seuraava tunti, meidän arviomme", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
-  radarAttr:"Tutka: Ilmatieteen laitos (CC BY 4.0) · Tuleva tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
+  radarAttr:"Uusin tutkakuva: Ilmatieteen laitos (CC BY 4.0) · Seuraava tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
   trustMeta:"Todennettu oikeilla sääasemilla · avaa luvut",
@@ -630,10 +630,10 @@ function week(hs){
       <div class="mn">${Math.min(...t).toFixed(0)}°</div>
       <div class="rn">${r>=.1?r.toFixed(1)+" mm":""}</div></div>`}).join("");
 }
-/* ═══ rain radar: FMI's Finland composite for the past hour and Ilma's
-   optical-flow nowcast for the next hour (nowcast.py on the VPS), as fixed
-   Web-Mercator PNGs on a MapLibre map over an OpenFreeMap basemap. 13
-   requests per place, none on pan or zoom. ═══ */
+/* ═══ rain radar: FMI's newest composite scan and Ilma's optical-flow
+   nowcast for the next hour in 5-minute steps (nowcast.py on the VPS), as
+   fixed Web-Mercator PNGs on a MapLibre map over an OpenFreeMap basemap.
+   14 requests per place, none on pan or zoom. ═══ */
 const RADAR={map:null,frames:[],idx:0,timer:null,lib:null,key:null,marker:null};
 const inFinland=(lat,lon)=>lat>=59.5&&lat<=70.5&&lon>=19&&lon<=32;
 function loadLib(){
