@@ -98,20 +98,12 @@ FAQ_FI = [
      "Ilma laskee keskiarvon kuudesta ennustemallista: ECMWF AIFS ja sen parvi, ECMWF IFS, MET Nordic, Ilmatieteen laitoksen toimitettu ennuste ja Open-Meteo. Varjostettu alue kaaviossa näyttää, kuinka paljon mallit ovat eri mieltä."),
     ("Kuinka tarkka ennuste on?",
      "Tarkkuus todennetaan joka yö 14 suomalaisella sääasemalla, ja tulokset näkyvät sivulla. Sivu väittää olevansa tarkempi kuin kilpailija vain, kun ero on tilastollisesti merkitsevä."),
-    ("Mitä Ilma-avustaja osaa?",
-     "Voit kysyä säästä omin sanoin, esimerkiksi sopiiko lauantai-ilta ulkoilmatapahtumaan. Avustaja käyttää samoja työkaluja kuin selainten tekoälyagentit: kalibroituja todennäköisyyksiä, ennusteen vakautta ja päätösajankohtaa."),
-    ("Mitä WebMCP tarkoittaa?",
-     "WebMCP on avoin standardi, jolla verkkosivu tarjoaa työkaluja selaimessa toimiville tekoälyagenteille. Ilma rekisteröi 19 työkalua, joten agentti voi lukea todennettuja todennäköisyyksiä ja merkitä kaavioon sen, mitä ihminen katsoo."),
 ]
 FAQ_EN = [
     ("What is the forecast based on?",
      "Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree."),
     ("How accurate is it?",
      "Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant."),
-    ("What can the Ilma assistant do?",
-     "Ask about the weather in your own words, for example whether Saturday evening works for an outdoor event. The assistant uses the same tools that browser AI agents get: calibrated probabilities, forecast stability and when to decide."),
-    ("What is WebMCP?",
-     "WebMCP is an open standard that lets a web page offer tools to AI agents running in the browser. Ilma registers 19 tools, so an agent can read verified probabilities and mark the chart the human is looking at."),
 ]
 
 
@@ -163,7 +155,7 @@ def main():
                          f"ennustemallista ja näyttää haarukan, jonka sisällä mallit ovat: kapea haarukka tarkoittaa "
                          f"varmaa ennustetta, leveä epävarmaa.",
                          f"Ennusteen tarkkuus {reg_fi}n alueella todennetaan joka yö oikeilla sääasemilla, ja luvut ovat "
-                         f"sivulla nähtävissä. Kysy Ilma-avustajalta omin sanoin, esimerkiksi sopiiko viikonloppu retkelle."]
+                         f"sivulla nähtävissä."]
                 faq = FAQ_FI
             else:
                 title = f"{name} weather – 7-day forecast with verified accuracy | Ilma"
@@ -174,7 +166,7 @@ def main():
                          f"forecast models and shows the band the models fall in: a narrow band means a confident "
                          f"forecast, a wide one means uncertainty.",
                          f"Accuracy is verified every night against real weather stations, and the numbers are on the "
-                         f"page. Ask the Ilma assistant in plain words, for example whether the weekend works for a hike."]
+                         f"page."]
                 faq = FAQ_EN
             ld = [{"@context": "https://schema.org", "@type": "WebPage", "name": title, "url": url,
                    "inLanguage": lang, "isPartOf": {"@type": "WebSite", "name": "Ilma", "url": BASE + "/"},

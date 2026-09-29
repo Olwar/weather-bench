@@ -130,7 +130,7 @@ renamed `.disabled` - so exactly one collector writes to exactly one database.
 
     weather-bench-web.service      uvicorn on 127.0.0.1:8200, always restarted
     weather-bench-collect.timer    every 5h  -> collect.py
-    weather-bench-score.timer      04:30 UTC -> score.py && agent_stats.py
+    weather-bench-score.timer      04:30 UTC -> score.py
 
 nginx proxies :8080 -> :8200 and is deliberately NOT `default_server`: bare-IP
 :80 on that box already serves an unrelated site. A `weather.happypalette.app`
