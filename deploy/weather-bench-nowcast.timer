@@ -1,0 +1,13 @@
+[Unit]
+Description=weather-bench radar nowcast every 5 minutes
+
+[Timer]
+# FMI's composite lands ~4-5 min after its scan time; the run takes whatever
+# is newest, so the exact phase does not matter.
+OnBootSec=2min
+OnCalendar=*-*-* *:0/5:45
+AccuracySec=10s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -142,6 +142,8 @@ nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;pos
 .radar-ctl button:hover{background:var(--paper-2)}
 .radar-ctl button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .radar-ctl .rtime{font-family:var(--display);font-style:italic;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:5ch}
+.radar-ctl .rtime.est{color:var(--ink-2)}
+.radar-ctl .rtime.est::after{content:" · " attr(data-est);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .radar-ctl .rtime.live::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--cold);margin-right:8px;vertical-align:middle}
 .radar input[type=range]{width:100%;margin:14px 0 0;accent-color:var(--ink);cursor:pointer}
 .radar-foot{margin-top:10px;font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -339,9 +341,9 @@ const I18N={
 en:{
   searchPh:"Search any place…",
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
-  radarLabel:"Rain radar · last 2 hours", radarPlay:"Play", radarPause:"Pause", radarNow:"latest",
+  radarLabel:"Rain radar · past hour, and the next hour as our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
-  radarAttr:"Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors",
+  radarAttr:"Radar: Finnish Meteorological Institute (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
   trustMeta:"Verified against real weather stations · open the numbers",
@@ -384,9 +386,9 @@ en:{
 fi:{
   searchPh:"Hae mikä tahansa paikka…",
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
-  radarLabel:"Sadetutka · viimeiset 2 tuntia", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin",
+  radarLabel:"Sadetutka · tunti taakse, ja tunti eteen meidän arviona", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
-  radarAttr:"Tutka: Ilmatieteen laitos (CC BY 4.0) · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
+  radarAttr:"Tutka: Ilmatieteen laitos (CC BY 4.0) · Tuleva tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
   trustMeta:"Todennettu oikeilla sääasemilla · avaa luvut",
@@ -435,7 +437,7 @@ function applyStatic(){
   $("#q").placeholder=L.searchPh;
   $("#chartLabel").textContent=L.chartLabel;
   $("#radarLabel").textContent=L.radarLabel;$("#radarAttr").textContent=L.radarAttr;
-  $("#radarLegend").innerHTML=[["#5CC8E8",0],["#3AA657",1],["#E8B03A",2]].map(([c,i])=>`<span class="lg"><i style="background:${c}"></i>${L.radarLegend[i]}</span>`).join(" ");
+  $("#radarLegend").innerHTML=[["#6ECDEB",0],["#28965A",1],["#E6461E",2]].map(([c,i])=>`<span class="lg"><i style="background:${c}"></i>${L.radarLegend[i]}</span>`).join(" ");
   if(window._radarSync)window._radarSync();
   $("#twoWeeks").textContent=L.twoWeeks;
   $("#trustmeta").textContent=L.trustMeta;
@@ -628,10 +630,11 @@ function week(hs){
       <div class="mn">${Math.min(...t).toFixed(0)}°</div>
       <div class="rn">${r>=.1?r.toFixed(1)+" mm":""}</div></div>`}).join("");
 }
-/* ═══ rain radar: FMI's Finland composite, drawn by MapLibre on an OpenFreeMap
-   basemap. Frames are single WMS images per view (13 requests per place,
-   not hundreds of tiles); the last frame is the newest radar scan. ═══ */
-const RADAR={map:null,frames:[],idx:0,timer:null,lib:null,key:null};
+/* ═══ rain radar: FMI's Finland composite for the past hour and Ilma's
+   optical-flow nowcast for the next hour (nowcast.py on the VPS), as fixed
+   Web-Mercator PNGs on a MapLibre map over an OpenFreeMap basemap. 13
+   requests per place, none on pan or zoom. ═══ */
+const RADAR={map:null,frames:[],idx:0,timer:null,lib:null,key:null,marker:null};
 const inFinland=(lat,lon)=>lat>=59.5&&lat<=70.5&&lon>=19&&lon<=32;
 function loadLib(){
   if(RADAR.lib)return RADAR.lib;
@@ -641,25 +644,13 @@ function loadLib(){
   });
   return RADAR.lib;
 }
-const merc=(lon,lat)=>[lon*20037508.34/180,Math.log(Math.tan((90+lat)*Math.PI/360))/(Math.PI/180)*20037508.34/180];
-function radarView(){
-  const m=RADAR.map,b=m.getBounds(),c=m.getCanvas();
-  const [x0,y0]=merc(b.getWest(),b.getSouth()),[x1,y1]=merc(b.getEast(),b.getNorth());
-  const w=Math.min(1200,c.width),h=Math.round(w*c.height/c.width);
-  return {bbox:`${x0},${y0},${x1},${y1}`,w,h,
-    coords:[[b.getWest(),b.getNorth()],[b.getEast(),b.getNorth()],[b.getEast(),b.getSouth()],[b.getWest(),b.getSouth()]]};
-}
-function frameUrl(d,t,v){
-  return `${d.wms}?service=WMS&version=1.1.1&request=GetMap&layers=${d.layer}&styles=&format=image/png&transparent=true`+
-    `&srs=EPSG:3857&width=${v.w}&height=${v.h}&bbox=${v.bbox}&time=${t}`;
-}
 function radarShow(i){
   RADAR.idx=i;
   RADAR.frames.forEach((f,j)=>{if(RADAR.map.getLayer(f.id))RADAR.map.setPaintProperty(f.id,"raster-opacity",j===i?.78:0)});
-  const t=RADAR.frames[i].t,d=new Date(t);
-  const el=$("#radarTime");
-  el.textContent=d.toLocaleTimeString(L.locale,{hour:"2-digit",minute:"2-digit"});
-  el.classList.toggle("live",i===RADAR.frames.length-1);
+  const f=RADAR.frames[i],el=$("#radarTime");
+  el.textContent=new Date(f.t).toLocaleTimeString(L.locale,{hour:"2-digit",minute:"2-digit"});
+  el.classList.toggle("live",f.lead===0);
+  el.classList.toggle("est",f.lead>0);el.dataset.est=L.radarEst;
   $("#radarSlider").value=i;
 }
 function radarStop(){clearInterval(RADAR.timer);RADAR.timer=null;$("#radarPlay").textContent="▶";$("#radarPlay").setAttribute("aria-label",L.radarPlay)}
@@ -670,15 +661,9 @@ function radarPlay(){
   RADAR.timer=setInterval(()=>{
     if(hold>0){hold--;return}
     const n=(RADAR.idx+1)%RADAR.frames.length;
-    if(n===0)hold=0;
     radarShow(n);
-    if(n===RADAR.frames.length-1)hold=3;   /* linger on the newest frame */
-  },450);
-}
-function radarRefresh(d){
-  const v=radarView();
-  RADAR.frames.forEach(f=>{const src=RADAR.map.getSource(f.id);
-    if(src)src.updateImage({url:frameUrl(d,f.t,v),coordinates:v.coords})});
+    if(n===RADAR.frames.length-1)hold=3;   /* linger on the last frame */
+  },500);
 }
 async function radar(){
   const sec=$("#radarSec");
@@ -686,8 +671,8 @@ async function radar(){
   sec.hidden=false;
   try{
     await loadLib();
-    const d=await (await fetch("/api/radar")).json();
-    const key=`${CUR.lat.toFixed(3)},${CUR.lon.toFixed(3)}|${d.times[d.times.length-1]}`;
+    const d=await (await fetch("/api/nowcast")).json();
+    const key=`${CUR.lat.toFixed(3)},${CUR.lon.toFixed(3)}|${d.latest}`;
     if(RADAR.map&&RADAR.key===key)return;
     if(!RADAR.map){
       $("#radarMap").innerHTML="";
@@ -697,26 +682,25 @@ async function radar(){
       m.touchZoomRotate.disableRotation();
       RADAR.map=m;
       await new Promise(res=>m.once("load",res));
-      m.on("moveend",()=>{if(RADAR.d)radarRefresh(RADAR.d)});
       $("#radarPlay").onclick=radarPlay;
       $("#radarSlider").oninput=e=>{radarStop();radarShow(+e.target.value)};
       RADAR.marker=new maplibregl.Marker({color:"#181513",scale:.8}).setLngLat([CUR.lon,CUR.lat]).addTo(m);
     }else{
       RADAR.map.jumpTo({center:[CUR.lon,CUR.lat],zoom:6.6});
-      if(RADAR.marker)RADAR.marker.setLngLat([CUR.lon,CUR.lat]);
+      RADAR.marker.setLngLat([CUR.lon,CUR.lat]);
     }
-    const m=RADAR.map;RADAR.d=d;
+    const m=RADAR.map,b=d.bbox_lnglat;
     radarStop();
     RADAR.frames.forEach(f=>{if(m.getLayer(f.id))m.removeLayer(f.id);if(m.getSource(f.id))m.removeSource(f.id)});
-    const v=radarView();
-    RADAR.frames=d.times.map((t,i)=>({t,id:`radar${i}`}));
+    const coords=[[b.w,b.n],[b.e,b.n],[b.e,b.s],[b.w,b.s]];
+    RADAR.frames=d.frames.map((f,i)=>({t:f.t,lead:f.lead_min,id:`radar${i}`,url:`/api/nowcast/${f.file}`}));
     RADAR.frames.forEach(f=>{
-      m.addSource(f.id,{type:"image",url:frameUrl(d,f.t,v),coordinates:v.coords});
-      m.addLayer({id:f.id,type:"raster",source:f.id,paint:{"raster-opacity":0,"raster-opacity-transition":{duration:0},"raster-resampling":"nearest"}});
+      m.addSource(f.id,{type:"image",url:f.url,coordinates:coords});
+      m.addLayer({id:f.id,type:"raster",source:f.id,paint:{"raster-opacity":0,"raster-opacity-transition":{duration:0},"raster-resampling":"linear"}});
     });
     $("#radarSlider").max=RADAR.frames.length-1;
     RADAR.key=key;
-    radarShow(RADAR.frames.length-1);
+    radarShow(RADAR.frames.findIndex(f=>f.lead===0));
   }catch(e){$("#radarMap").innerHTML=`<div class="load">${L.statsFail}</div>`}
 }
 window._radarSync=()=>{if(RADAR.frames.length&&RADAR.map)radarShow(RADAR.idx)};

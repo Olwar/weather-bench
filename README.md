@@ -176,15 +176,25 @@ pre-registered t2m primary is untouched. Method notes:
   memory. They are derived data; keeping ~7M of them all day inflated DB
   growth and backups ~40%, and rebuilding them nightly cost 2.5 h.
 
-## Rain radar on the site (added 2026-09-29)
+## Rain radar and nowcast on the site (added 2026-09-29)
 
-Finland only. The page shows the last two hours of FMI's open-data rain-rate
-composite (`suomi_rr_eureffin`, CC BY 4.0) as 13 frames at 10-minute steps on
-a MapLibre map (OpenFreeMap basemap, MapLibre vendored under
-`web/static/vendor/`). `/api/radar` returns the frame times; the images come
-straight from FMI's WMS as one Web-Mercator GetMap per frame and view, so a
-visit costs FMI 13 requests, not hundreds of tiles. No nowcast: FMI publishes
-none on the WMS, and the radar is display-only - it feeds no score.
+Finland only. The page shows the past hour of FMI's open-data rain-rate
+composite and the next hour as Ilma's own nowcast, 12 frames at 10-minute
+steps on a MapLibre map (OpenFreeMap basemap, MapLibre vendored under
+`web/static/vendor/`).
+
+`nowcast.py` runs every 5 minutes on the VPS: it fetches the raw composite
+(WFS `fmi::radar::composite::rr`, 16-bit GeoTIFF, 1 km, CC BY 4.0), estimates
+the motion field with dense optical flow between the three newest scans,
+fills rain-free areas with the intensity-weighted mean motion, and advects the
+newest scan forward (semi-Lagrangian, constant velocity) for +10..+60 min.
+That is Lagrangian persistence - the first-order method behind the national
+services' 0-2 h views: good for fronts and bands, blind to showers that form
+or die in place, and the page labels every future frame as an estimate.
+Frames are reprojected to Web Mercator and served as PNGs by `/api/nowcast`;
+a page view costs 13 requests and nothing on pan or zoom. Display-only: the
+nowcast feeds no score yet (verifying it against the radar itself at +30/+60
+min is the obvious next step).
 
 ## International expansion (added 2026-08-26: SE, DK, DE, US)
 

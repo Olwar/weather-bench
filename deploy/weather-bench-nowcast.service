@@ -1,0 +1,10 @@
+[Unit]
+Description=weather-bench radar nowcast (FMI composite + optical flow)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/weather-bench
+Environment=WEATHERBENCH_DATA=/opt/weather-bench/data
+ExecStart=/opt/weather-bench/.venv/bin/python /opt/weather-bench/nowcast.py
+MemoryMax=1G
+Nice=10
