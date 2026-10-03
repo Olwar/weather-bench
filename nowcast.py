@@ -15,8 +15,20 @@ Every 5 minutes (systemd timer):
   4. Reproject the newest scan and the future frames to Web Mercator, colour
      them with a fixed rain-rate palette and write PNGs + index.json.
 
-Output: data/nowcast/index.json, data/nowcast/<stamp>.png. Read by web/app.py
-(/api/nowcast). Display-only: nothing here feeds a score. Runs in ~15 s.
+  5. Verify itself. Each run stores its predicted field at +15..+120 min on a
+     2 km grid (verify_pending/); once the real scan for a target time has
+     arrived, a later run scores the prediction against it - rain yes/no at
+     0.1 and 1.0 mm/h, hits/misses/false alarms over the radar-covered cells -
+     and the same for PERSISTENCE (the scan at issue time, held still), which
+     is the baseline any nowcast must beat. One JSON line per (issue, lead)
+     goes to verify.jsonl; skill.json holds the last 7 and 30 days aggregated
+     by lead (CSI/POD/FAR, nowcast vs persistence). The radar is its own
+     truth here, so this costs nothing extra and the page can say how far
+     the estimate is worth trusting.
+
+Output: data/nowcast/index.json, <stamp>.png, verify.jsonl, skill.json. Read by
+web/app.py (/api/nowcast, /api/nowcast/skill). Nothing here feeds the forecast
+scores in score.py. Runs in a few seconds.
 """
 import io
 import json
@@ -25,6 +37,7 @@ import re
 import sys
 import time
 import urllib.request
+import warnings
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -50,7 +63,12 @@ PAST = [0]                                                   # the newest scan a
 FUTURE = list(range(5, 65, 5))                               # next hour, 5-minute steps
 OUT = DATA_DIR / "nowcast"
 RAW = OUT / "raw"
-KEEP_RAW = 16
+KEEP_RAW = 30                                                # 2.5 h: verification needs the scan at issue time
+VERIFY_LEADS = [15, 30, 45, 60, 90, 120]
+PEND = OUT / "verify_pending"
+VLOG = OUT / "verify.jsonl"
+SKILL = OUT / "skill.json"
+THRESHOLDS = ((1, 0.1), (10, 1.0))                           # (encoded code, mm/h)
 OUT_RES_M = 2400                                             # output pixel size in Web Mercator
 NODATA = 65535
 # rain-rate classes (mm/h) and RGBA, from light to violent
@@ -176,6 +194,113 @@ def render(rr: np.ndarray, maps, path: Path):
     Image.fromarray(rgba, "RGBA").save(path, optimize=True)
 
 
+def _to2km(rr: np.ndarray) -> np.ndarray:
+    """2 km cells (block mean); NaN where the whole block is outside coverage."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)   # all-NaN blocks
+        return np.nanmean(rr.reshape(H // 2, 2, W // 2, 2), axis=(1, 3))
+
+
+def _encode(rr2: np.ndarray) -> np.ndarray:
+    """uint8: tenths of mm/h clipped to 25.4, 255 = no coverage."""
+    a = np.clip(np.nan_to_num(rr2, nan=0.0) * 10.0, 0, 254).astype(np.uint8)
+    a[np.isnan(rr2)] = 255
+    return a
+
+
+def save_pending(now: datetime, rr: np.ndarray, v: np.ndarray):
+    PEND.mkdir(parents=True, exist_ok=True)
+    stamp = now.strftime("%Y%m%dT%H%M")
+    for lead in VERIFY_LEADS:
+        np.save(PEND / f"{stamp}_p{lead:03d}.npy", _encode(_to2km(advect(rr, v, lead / STEP))))
+
+
+def _counts(pred: np.ndarray, obs: np.ndarray, valid: np.ndarray, code: int) -> dict:
+    p, o = (pred >= code) & valid, (obs >= code) & valid
+    return {"hit": int((p & o).sum()), "miss": int((~p & o).sum()),
+            "fa": int((p & ~o).sum()), "cn": int((~p & ~o & valid).sum())}
+
+
+def verify(now: datetime) -> int:
+    """Score every pending prediction whose target scan has arrived."""
+    if not PEND.exists():
+        return 0
+    done, obs_cache = 0, {}
+    for path in sorted(PEND.glob("*.npy")):
+        stamp, lead = path.stem.split("_p")
+        issue = datetime.strptime(stamp, "%Y%m%dT%H%M").replace(tzinfo=timezone.utc)
+        lead = int(lead)
+        target = issue + timedelta(minutes=lead)
+        if target > now:
+            continue
+        if now - target > timedelta(hours=6):   # stale beyond the raw cache: give up quietly
+            path.unlink()
+            continue
+        try:
+            for t in (target, issue):
+                if t not in obs_cache:
+                    obs_cache[t] = _encode(_to2km(frame(t)))
+        except Exception as e:  # noqa: BLE001 - FMI hiccup: leave it for the next run
+            print(f"verify: {path.name} waits ({e})", flush=True)
+            continue
+        pred, obs, persist = np.load(path), obs_cache[target], obs_cache[issue]
+        valid = (pred != 255) & (obs != 255) & (persist != 255)
+        rec = {"issue": _iso(issue), "lead_min": lead, "target": _iso(target), "cells": int(valid.sum())}
+        for code, mmh in THRESHOLDS:
+            rec[f"thr_{mmh}"] = {"nowcast": _counts(pred, obs, valid, code),
+                                 "persistence": _counts(persist, obs, valid, code)}
+        with open(VLOG, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+        path.unlink()
+        done += 1
+    return done
+
+
+def _scores(c: dict) -> dict:
+    h, m, fa = c["hit"], c["miss"], c["fa"]
+    return {"csi": round(h / (h + m + fa), 3) if h + m + fa else None,
+            "pod": round(h / (h + m), 3) if h + m else None,
+            "far": round(fa / (h + fa), 3) if h + fa else None}
+
+
+def skill(now: datetime):
+    """Aggregate verify.jsonl into skill.json: last 7 and 30 days, by lead."""
+    if not VLOG.exists():
+        return
+    windows = {"7d": now - timedelta(days=7), "30d": now - timedelta(days=30)}
+    acc = {w: {} for w in windows}
+    n_issue = {w: {} for w in windows}
+    with open(VLOG) as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            t = datetime.strptime(r["issue"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            for w, since in windows.items():
+                if t < since:
+                    continue
+                lead = str(r["lead_min"])
+                n_issue[w][lead] = n_issue[w].get(lead, 0) + 1
+                for _, mmh in THRESHOLDS:
+                    k = f"thr_{mmh}"
+                    cell = acc[w].setdefault(lead, {}).setdefault(k, {"nowcast": {"hit": 0, "miss": 0, "fa": 0, "cn": 0},
+                                                                        "persistence": {"hit": 0, "miss": 0, "fa": 0, "cn": 0}})
+                    for who in ("nowcast", "persistence"):
+                        for key in cell[who]:
+                            cell[who][key] += r[k][who][key]
+    out = {"generated": _iso(now), "grid_km": 2, "leads_min": VERIFY_LEADS,
+           "thresholds_mmh": [m for _, m in THRESHOLDS], "windows": {}}
+    for w in windows:
+        out["windows"][w] = {lead: {"n_issues": n_issue[w][lead],
+                                    **{k: {who: _scores(c[k][who]) for who in ("nowcast", "persistence")}
+                                       for k in c}}
+                             for lead, c in sorted(acc[w].items(), key=lambda kv: int(kv[0]))}
+    tmp = SKILL.with_suffix(".tmp")
+    tmp.write_text(json.dumps(out))
+    tmp.replace(SKILL)
+
+
 def main():
     t0 = time.time()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -210,12 +335,16 @@ def main():
     tmp = OUT / "index.json.tmp"
     tmp.write_text(json.dumps(index))
     tmp.replace(OUT / "index.json")
+    save_pending(now, frames[now], v)
+    verified = verify(now)
+    skill(now)
     for p in OUT.glob("*.png"):
         if p.name not in keep:
             p.unlink()
     for p in sorted(RAW.glob("*.npy"))[:-KEEP_RAW]:
         p.unlink()
-    print(f"nowcast {_iso(now)}: {len(out_frames)} frames, mean motion {speed:.0f} km/h, {time.time() - t0:.1f}s", flush=True)
+    print(f"nowcast {_iso(now)}: {len(out_frames)} frames, mean motion {speed:.0f} km/h, "
+          f"{verified} verified, {time.time() - t0:.1f}s", flush=True)
 
 
 if __name__ == "__main__":

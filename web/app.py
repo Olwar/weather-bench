@@ -286,6 +286,16 @@ def nowcast():
     return JSONResponse(_NOWCAST["data"], headers={"Cache-Control": "public, max-age=60"})
 
 
+@app.get("/api/nowcast/skill")
+def nowcast_skill():
+    """The nowcast verified against the radar itself: CSI/POD/FAR by lead,
+    last 7 and 30 days, next to the persistence baseline."""
+    f = NOWCAST / "skill.json"
+    if not f.exists():
+        raise HTTPException(503, "no verification yet")
+    return JSONResponse(json.loads(f.read_text()), headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/api/nowcast/{name}")
 def nowcast_frame(name: str):
     if not _FRAME_NAME.match(name) or not (NOWCAST / name).exists():

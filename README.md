@@ -192,9 +192,19 @@ That is Lagrangian persistence - the first-order method behind the national
 services' 0-2 h views: good for fronts and bands, blind to showers that form
 or die in place, and the page labels every future frame as an estimate.
 Frames are reprojected to Web Mercator and served as PNGs by `/api/nowcast`;
-a page view costs 14 requests and nothing on pan or zoom. Display-only: the
-nowcast feeds no score yet (verifying it against the radar itself at +30/+60
-min is the obvious next step).
+a page view costs 14 requests and nothing on pan or zoom.
+
+**The nowcast verifies itself** (added 2026-10-03). Every run stores its
+predicted field at +15, +30, +45, +60, +90 and +120 min on a 2 km grid; once
+the real scan for a target time exists, a later run scores it: rain yes/no at
+0.1 and 1.0 mm/h, hits/misses/false alarms over radar-covered cells, and the
+same for persistence (the issue-time scan held still), which any nowcast must
+beat. `verify.jsonl` keeps one line per (issue, lead); `skill.json` aggregates
+the last 7 and 30 days by lead and is served at `/api/nowcast/skill`. The page
+prints CSI at +30/+60/+120 next to the persistence number once at least 48
+issues per lead are in. This is separate from `score.py` and its Holm families:
+the radar is the truth here, not the stations, and there is no inference,
+just counts.
 
 ## International expansion (added 2026-08-26: SE, DK, DE, US)
 

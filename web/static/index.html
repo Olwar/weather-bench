@@ -150,6 +150,9 @@ nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;pos
 .radar-foot .lg{display:inline-flex;align-items:center;gap:6px}
 .radar-foot .lg i{display:inline-block;width:14px;height:8px;border-radius:2px}
 .radar .load{padding:0}
+.radar-skill{margin-top:14px;font-size:13px;line-height:1.7;color:var(--ink-2);max-width:72ch}
+.radar-skill b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.radar-skill i{font-family:var(--display);font-style:italic}
 
 /* ═══ sections ═══ */
 section{padding:clamp(26px,4.5vw,44px) 0 0}
@@ -302,6 +305,7 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
     <span id="radarLegend"></span>
     <span id="radarAttr">Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors</span>
   </div>
+  <div class="radar-skill" id="radarSkill" hidden></div>
 </section>
 
 <section>
@@ -343,6 +347,7 @@ en:{
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
   radarLabel:"Rain radar · the next hour, our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
+  radarSkill:(d,rows)=>`<i>How good is the estimate?</i> Checked against the radar itself over the last ${d} days, rain yes or no in 2 km cells (hit rate CSI, higher is better; in brackets: keeping the newest scan still): `+rows.map(r=>`+${r.lead} min <b>${r.now}</b> (${r.keep})`).join(" · ")+`.`,
   radarAttr:"Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
@@ -388,6 +393,7 @@ fi:{
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
   radarLabel:"Sadetutka · seuraava tunti, meidän arviomme", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
+  radarSkill:(d,rows)=>`<i>Kuinka hyvä arvio on?</i> Verrattu tutkaan itseensä viimeisten ${d} päivän ajalta, sataako vai ei 2 km ruuduissa (osuvuus CSI, suurempi on parempi; suluissa: jos uusin tutkakuva pidettäisiin paikallaan): `+rows.map(r=>`+${r.lead} min <b>${r.now}</b> (${r.keep})`).join(" · ")+`.`,
   radarAttr:"Uusin tutkakuva: Ilmatieteen laitos (CC BY 4.0) · Seuraava tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
@@ -439,6 +445,7 @@ function applyStatic(){
   $("#radarLabel").textContent=L.radarLabel;$("#radarAttr").textContent=L.radarAttr;
   $("#radarLegend").innerHTML=[["#6ECDEB",0],["#28965A",1],["#E6461E",2]].map(([c,i])=>`<span class="lg"><i style="background:${c}"></i>${L.radarLegend[i]}</span>`).join(" ");
   if(window._radarSync)window._radarSync();
+  if(RADAR.skill)radarSkill();
   $("#twoWeeks").textContent=L.twoWeeks;
   $("#trustmeta").textContent=L.trustMeta;
   $("#footerTxt").textContent=L.footer;
@@ -701,9 +708,22 @@ async function radar(){
     $("#radarSlider").max=RADAR.frames.length-1;
     RADAR.key=key;
     radarShow(RADAR.frames.findIndex(f=>f.lead===0));
+    radarSkill();
   }catch(e){$("#radarMap").innerHTML=`<div class="load">${L.statsFail}</div>`}
 }
 window._radarSync=()=>{if(RADAR.frames.length&&RADAR.map)radarShow(RADAR.idx)};
+async function radarSkill(){
+  const el=$("#radarSkill");
+  try{
+    const r=await fetch("/api/nowcast/skill");if(!r.ok){el.hidden=true;return}
+    const d=await r.json();RADAR.skill=d;
+    const w=(d.windows["7d"]&&Object.keys(d.windows["7d"]).length)?"7d":"30d";
+    const rows=Object.entries(d.windows[w]||{}).filter(([l,c])=>c.n_issues>=48&&["30","60","120"].includes(l))
+      .map(([l,c])=>({lead:l,now:(c["thr_0.1"].nowcast.csi??0).toFixed(2),keep:(c["thr_0.1"].persistence.csi??0).toFixed(2)}));
+    if(rows.length<2){el.hidden=true;return}
+    el.innerHTML=L.radarSkill(w==="7d"?7:30,rows);el.hidden=false;
+  }catch(e){el.hidden=true}
+}
 
 /* trust strip */
 const NICE=s=>L.nice[s]||s;
