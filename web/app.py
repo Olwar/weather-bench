@@ -321,10 +321,13 @@ def og_png():
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    # Only ever reached directly on the bare origin (Vercel serves its own
+    # static copy of "/"), so it must never compete with ilma.io in search.
+    return FileResponse(STATIC / "index.html", headers={"X-Robots-Tag": "noindex"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 # Vercel serves web/static as the site root, so the page addresses the
 # vendored MapLibre as /vendor/...; the origin must answer the same path.
 app.mount("/vendor", StaticFiles(directory=STATIC / "vendor"), name="vendor")
+app.mount("/fonts", StaticFiles(directory=STATIC / "fonts"), name="fonts")

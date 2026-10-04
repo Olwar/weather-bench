@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <!--seo-->
 <title>Ilma – a weather forecast that shows how much to trust it</title>
-<meta name="description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night.">
+<meta name="description" content="Hourly forecasts for any place, 7 days ahead, and a rain radar for Finland. Ilma blends six weather models, shows how much they disagree, and verifies its accuracy against real stations every night.">
 <link rel="canonical" href="https://ilma.io/">
+<link rel="alternate" hreflang="en" href="https://ilma.io/">
+<link rel="alternate" hreflang="fi" href="https://ilma.io/fi/">
+<link rel="alternate" hreflang="x-default" href="https://ilma.io/">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <meta name="theme-color" content="#FAF6EF">
 <meta property="og:type" content="website">
@@ -14,24 +17,30 @@
 <meta property="og:locale" content="en_GB">
 <meta property="og:url" content="https://ilma.io/">
 <meta property="og:title" content="Ilma – a weather forecast that shows how much to trust it">
-<meta property="og:description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night.">
-<meta property="og:image" content="https://ilma.io/og.png">
+<meta property="og:description" content="Hourly forecasts for any place, 7 days ahead, and a rain radar for Finland. Ilma blends six weather models, shows how much they disagree, and verifies its accuracy against real stations every night.">
+<meta property="og:image" content="https://ilma.io/og.jpg">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Ilma – a weather forecast that shows how much to trust it">
-<meta name="twitter:description" content="Hourly forecasts for any place, 7 days ahead. Ilma blends six weather models, shows how much they disagree, verifies its accuracy against real stations every night.">
-<meta name="twitter:image" content="https://ilma.io/og.png">
-<script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebSite", "name": "Ilma", "url": "https://ilma.io/", "inLanguage": ["en", "fi"], "description": "A weather forecast that blends six models, shows how much they disagree, and verifies its accuracy against real weather stations every night."}, {"@context": "https://schema.org", "@type": "WebApplication", "name": "Ilma", "url": "https://ilma.io/", "applicationCategory": "Weather", "operatingSystem": "Any", "browserRequirements": "Requires JavaScript", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "featureList": ["Six-model blended forecast", "Model disagreement band", "Nightly verification against weather stations"]}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is the forecast based on?", "acceptedAnswer": {"@type": "Answer", "text": "Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree."}}, {"@type": "Question", "name": "How accurate is it?", "acceptedAnswer": {"@type": "Answer", "text": "Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant."}}]}]</script>
+<meta name="twitter:description" content="Hourly forecasts for any place, 7 days ahead, and a rain radar for Finland. Ilma blends six weather models, shows how much they disagree, and verifies its accuracy against real stations every night.">
+<meta name="twitter:image" content="https://ilma.io/og.jpg">
+<script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebSite", "name": "Ilma", "url": "https://ilma.io/", "inLanguage": ["en", "fi"], "description": "Hourly forecasts for any place, 7 days ahead, and a rain radar for Finland. Ilma blends six weather models, shows how much they disagree, and verifies its accuracy against real stations every night."}, {"@context": "https://schema.org", "@type": "Organization", "name": "Ilma", "url": "https://ilma.io/", "logo": "https://ilma.io/logo.png"}, {"@context": "https://schema.org", "@type": "WebApplication", "name": "Ilma", "url": "https://ilma.io/", "applicationCategory": "WeatherApplication", "operatingSystem": "Any", "browserRequirements": "Requires JavaScript", "inLanguage": "en", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "featureList": ["Six-model blended forecast", "Model disagreement band", "Rain radar and one-hour nowcast for Finland", "Nightly verification against weather stations"]}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is the forecast based on?", "acceptedAnswer": {"@type": "Answer", "text": "Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree."}}, {"@type": "Question", "name": "How accurate is it?", "acceptedAnswer": {"@type": "Answer", "text": "Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant."}}, {"@type": "Question", "name": "Does Ilma have a rain radar?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, for Finland. The map shows the newest radar scan from the Finnish Meteorological Institute and Ilma's estimate of where the rain moves in the next hour, in 5-minute steps. Each future frame shows how often that estimate has been right over the last week."}}]}]</script>
 <!--/seo-->
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&family=Karla:ital,wght@0,300..700;1,300..500&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/karla-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/fraunces-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+/* Fraunces + Karla, latin subset, self-hosted (was Google Fonts: a
+   render-blocking third-party stylesheet worth ~0.8 s on mobile). */
+@font-face { font-family: 'Fraunces'; font-style: italic; font-weight: 300 700; font-display: swap; src: url(/fonts/fraunces-italic.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 300 900; font-display: swap; src: url(/fonts/fraunces-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Karla'; font-style: italic; font-weight: 300 500; font-display: swap; src: url(/fonts/karla-italic.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Karla'; font-style: normal; font-weight: 300 700; font-display: swap; src: url(/fonts/karla-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 :root{
   --paper:#FAF6EF; --paper-2:#F3EDE3; --paper-3:#EBE3D6;
-  --ink:#181513; --ink-2:#544A42; --ink-3:#8A7D72;
+  --ink:#181513; --ink-2:#544A42; --ink-3:#74685E;
   --rule:#DCD2C3; --rule-2:#C8BCA9;
   --cold:#3E6E9E; --mild:#4E7F63; --warm:#C0592A;
   --accent:var(--mild);
@@ -133,6 +142,14 @@ nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;pos
 .hr .r{font-size:11.5px;color:var(--cold);min-height:15px}
 .hr.nowh{background:rgba(24,21,19,.06)}
 
+/* ═══ space reserved for what the script fills in, so loading never moves
+   the page (measured at 412 and 1300 px: strip 131, verdict 47, side 124) ═══ */
+.hours{min-height:131px}
+.strip-verdict{min-height:47px}
+.big .side{min-height:124px}
+#chart{aspect-ratio:1100/260}
+#radarLegend{display:inline-block;min-width:200px;min-height:18px}
+
 /* ═══ rain radar (FMI open data, Finland only) ═══ */
 .radar-map{height:min(440px,62vw);border-radius:16px;overflow:hidden;border:1px solid var(--rule);background:var(--paper-2)}
 .radar-map .maplibregl-ctrl-attrib{display:none}
@@ -174,7 +191,7 @@ svg{display:block;width:100%;overflow:visible}
 .d:last-child{border-right:0}
 .d:hover{background:var(--paper-2)}
 .d .wd{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-.d .dm{font-size:11.5px;color:var(--ink-3);opacity:.7;margin-bottom:8px}
+.d .dm{font-size:11.5px;color:var(--ink-3);margin-bottom:8px}
 .d .ic{margin-bottom:8px}
 .d .ic svg{width:26px;height:26px;stroke:var(--ink);opacity:.75;margin:0 auto}
 .d .mx{font-family:var(--display);font-size:29px;font-weight:360;line-height:1;font-variant-numeric:tabular-nums}
@@ -242,6 +259,9 @@ svg{display:block;width:100%;overflow:visible}
 .faq details[open] summary::after{content:"–"}
 .faq p{padding:0 0 14px;margin:0}
 .cities{margin:34px 0 0;font-size:13px}
+.hub{list-style:none;columns:2 180px;gap:24px;margin:6px 0 18px;padding:0;font-size:15px;line-height:2}
+.hub a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--rule)}
+.hub a:hover{border-color:var(--ink-3)}
 .cities .label{margin-bottom:10px}
 .cities .row{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px}
 .cities a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--rule)}
@@ -294,16 +314,16 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
 
 <div class="wrap">
 
-<section class="radar" id="radarSec" hidden>
+<section class="radar" id="radarSec">
   <div class="plot-hd">
-    <div class="label" id="radarLabel">Rain radar · last 2 hours</div>
+    <div class="label" id="radarLabel">Rain radar · the next hour, our estimate</div>
     <div class="radar-ctl"><button id="radarPlay" aria-label="Play">▶</button><span class="rtime" id="radarTime">–</span></div>
   </div>
   <div class="radar-wrap"><div class="radar-map" id="radarMap"><div class="load">loading…</div></div><div class="radar-trust" id="radarTrust" hidden></div></div>
   <input type="range" id="radarSlider" min="0" max="12" value="0" step="1" aria-label="Radar frame">
   <div class="radar-foot">
     <span id="radarLegend"></span>
-    <span id="radarAttr">Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors</span>
+    <span id="radarAttr">Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors</span>
   </div>
 </section>
 
@@ -327,7 +347,7 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
   <div class="inner" id="trustbody"><div class="load">loading…</div></div>
 </details>
 
-<!--about--><section class="about" id="about"><h1>Ilma – a weather forecast that shows how much to trust it</h1><p>Ilma is a weather forecast for any place on earth, seven days ahead, hour by hour. It averages six forecast models and shows the band the models fall in: a narrow band means a confident forecast, a wide one means the models disagree and you should plan for both outcomes.</p><p>The forecast's accuracy is verified every night against 14 Finnish weather stations, and the results are published on this page. The site claims to be better than a named competitor only when the difference is statistically significant.</p><div class="faq"><details><summary>What is the forecast based on?</summary><p>Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree.</p></details><details><summary>How accurate is it?</summary><p>Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant.</p></details></div></section><!--/about-->
+<!--about--><section class="about" id="about"><h1>Ilma – a weather forecast that shows how much to trust it</h1><p>Ilma is a weather forecast for any place on earth, seven days ahead, hour by hour. It averages six forecast models and shows the band the models fall in: a narrow band means a confident forecast, a wide one means the models disagree and you should plan for both outcomes.</p><p>The forecast's accuracy is verified every night against 14 Finnish weather stations, and the results are published on this page. The site claims to be better than a named competitor only when the difference is statistically significant.</p><div class="faq"><details><summary>What is the forecast based on?</summary><p>Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree.</p></details><details><summary>How accurate is it?</summary><p>Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant.</p></details><details><summary>Does Ilma have a rain radar?</summary><p>Yes, for Finland. The map shows the newest radar scan from the Finnish Meteorological Institute and Ilma's estimate of where the rain moves in the next hour, in 5-minute steps. Each future frame shows how often that estimate has been right over the last week.</p></details></div></section><!--/about-->
 <!--cities--><nav class="cities" aria-label="Cities"><div class="label">Sää Suomessa · Weather elsewhere</div><div class="row"><a href="/saa/helsinki/">Sää Helsinki</a><a href="/saa/tampere/">Sää Tampere</a><a href="/saa/oulu/">Sää Oulu</a><a href="/saa/rovaniemi/">Sää Rovaniemi</a><a href="/saa/turku/">Sää Turku</a><a href="/saa/jyvaskyla/">Sää Jyväskylä</a><a href="/saa/vaasa/">Sää Vaasa</a><a href="/saa/kuopio/">Sää Kuopio</a><a href="/saa/joensuu/">Sää Joensuu</a><a href="/saa/lappeenranta/">Sää Lappeenranta</a><a href="/saa/pori/">Sää Pori</a><a href="/saa/kajaani/">Sää Kajaani</a><a href="/saa/sodankyla/">Sää Sodankylä</a><a href="/saa/mariehamn/">Sää Maarianhamina</a></div><div class="row"><a href="/weather/stockholm/">Stockholm weather</a><a href="/weather/goteborg/">Göteborg weather</a><a href="/weather/malmo/">Malmö weather</a><a href="/weather/lulea/">Luleå weather</a><a href="/weather/kobenhavn/">Copenhagen weather</a><a href="/weather/aarhus/">Aarhus weather</a><a href="/weather/aalborg/">Aalborg weather</a><a href="/weather/berlin/">Berlin weather</a><a href="/weather/hamburg/">Hamburg weather</a><a href="/weather/munchen/">Munich weather</a><a href="/weather/frankfurt/">Frankfurt weather</a><a href="/weather/koln/">Cologne weather</a><a href="/weather/newyork/">New York weather</a><a href="/weather/chicago/">Chicago weather</a><a href="/weather/houston/">Houston weather</a><a href="/weather/denver/">Denver weather</a><a href="/weather/seattle/">Seattle weather</a><a href="/weather/miami/">Miami weather</a></div></nav><!--/cities-->
 <footer>
   <div><span id="footerTxt">Ilma averages six forecast models — ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute and Open-Meteo — and verifies the result against 14 Finnish weather stations.</span> <span id="gen"></span></div>
@@ -531,6 +551,7 @@ async function find(v){
 document.addEventListener("click",e=>{if(!e.target.closest(".finder"))$("#res").classList.remove("on")});
 
 async function load(lat,lon,name,sub){
+  radarPlace(lat,lon);
   $("#city").textContent=name;$("#loc").textContent=sub||"";
   localStorage.setItem("ilma",JSON.stringify({lat,lon,name,sub}));
   try{
@@ -587,11 +608,11 @@ function chart(hs){
   let grid="",step=Math.max(1,Math.round((mx-mn)/4));
   for(let v=Math.ceil(mn/step)*step;v<mx;v+=step)
     grid+=`<line x1="${P.l}" y1="${Y(v)}" x2="${W-P.r}" y2="${Y(v)}" stroke="#DCD2C3"/>
-      <text x="${P.l-10}" y="${Y(v)+4}" fill="#8A7D72" font-size="12" text-anchor="end" font-family="Karla">${v}°</text>`;
+      <text x="${P.l-10}" y="${Y(v)+4}" fill="#74685E" font-size="12" text-anchor="end" font-family="Karla">${v}°</text>`;
   let mid="";
   hs.forEach((h,i)=>{if(h.time.slice(11,13)==="00"&&i>2)
     mid+=`<line x1="${X(i)}" y1="${P.t-6}" x2="${X(i)}" y2="${H-P.b}" stroke="#C8BCA9" stroke-dasharray="1 5"/>
-      <text x="${X(i)+8}" y="${H-P.b+20}" fill="#8A7D72" font-size="12" font-family="Karla">${
+      <text x="${X(i)+8}" y="${H-P.b+20}" fill="#74685E" font-size="12" font-family="Karla">${
         new Date(h.time+"Z").toLocaleDateString(L.locale,{weekday:"short",timeZone:"UTC"})}</text>`});
   $("#chart").className="";
   $("#chart").innerHTML=`<svg viewBox="0 0 ${W} ${H}">
@@ -648,10 +669,13 @@ const RADAR={map:null,frames:[],idx:0,timer:null,lib:null,key:null,marker:null};
 const inFinland=(lat,lon)=>lat>=59.5&&lat<=70.5&&lon>=19&&lon<=32;
 function loadLib(){
   if(RADAR.lib)return RADAR.lib;
-  RADAR.lib=new Promise((res,rej)=>{
-    const l=document.createElement("link");l.rel="stylesheet";l.href="/vendor/maplibre-gl.css";document.head.appendChild(l);
-    const sc=document.createElement("script");sc.src="/vendor/maplibre-gl.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);
-  });
+  /* both the script AND its stylesheet: a map built before the CSS applies
+     renders its overlay elements unstyled, in flow, and shifts the page */
+  const css=new Promise((res,rej)=>{const l=document.createElement("link");l.rel="stylesheet";
+    l.href="/vendor/maplibre-gl.css";l.onload=res;l.onerror=rej;document.head.appendChild(l)});
+  const js=new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="/vendor/maplibre-gl.js";
+    sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
+  RADAR.lib=Promise.all([css,js]);
   return RADAR.lib;
 }
 function radarShow(i){
@@ -676,10 +700,22 @@ function radarPlay(){
     if(n===RADAR.frames.length-1)hold=3;   /* linger on the last frame */
   },500);
 }
+/* The section is in the markup with its height reserved, so showing it never
+   moves the page (it was CLS 0.57). It is hidden synchronously, before any
+   fetch, when the place is outside Finland. MapLibre (~210 KB gz) loads only
+   when the section approaches the viewport. */
+function radarPlace(lat,lon){
+  const fin=inFinland(lat,lon);
+  $("#radarSec").hidden=!fin;
+  if(!fin)radarStop();
+}
+const radarIO=("IntersectionObserver" in window)?new IntersectionObserver(es=>{
+  if(es.some(e=>e.isIntersecting)){RADAR.seen=true;radarIO.disconnect();radar()}},{rootMargin:"400px 0px"}):null;
+if(radarIO)radarIO.observe($("#radarSec"));else RADAR.seen=true;
 async function radar(){
-  const sec=$("#radarSec");
-  if(!CUR||!inFinland(CUR.lat,CUR.lon)){sec.hidden=true;radarStop();return}
-  sec.hidden=false;
+  if(!CUR)return;                       /* load() calls again once the forecast is in */
+  if(!inFinland(CUR.lat,CUR.lon)){radarPlace(CUR.lat,CUR.lon);return}
+  if(!RADAR.seen)return;
   try{
     await loadLib();
     const d=await (await fetch("/api/nowcast")).json();
@@ -696,6 +732,7 @@ async function radar(){
       $("#radarPlay").onclick=radarPlay;
       $("#radarSlider").oninput=e=>{radarStop();radarShow(+e.target.value)};
       RADAR.marker=new maplibregl.Marker({color:"#181513",scale:.8}).setLngLat([CUR.lon,CUR.lat]).addTo(m);
+      RADAR.marker.getElement().setAttribute("role","img");
     }else{
       RADAR.map.jumpTo({center:[CUR.lon,CUR.lat],zoom:6.6});
       RADAR.marker.setLngLat([CUR.lon,CUR.lat]);
@@ -713,7 +750,7 @@ async function radar(){
     RADAR.key=key;
     radarShow(RADAR.frames.findIndex(f=>f.lead===0));
     radarSkill();
-  }catch(e){$("#radarMap").innerHTML=`<div class="load">${L.statsFail}</div>`}
+  }catch(e){$("#radarMap").innerHTML=`<div class="load">loading…</div>`}
 }
 window._radarSync=()=>{if(RADAR.frames.length&&RADAR.map)radarShow(RADAR.idx)};
 async function radarSkill(){
@@ -828,7 +865,7 @@ async function evidence(){
       $("#boards").innerHTML=boards(b.dataset.sc);members();});
     if(d.generated)$("#gen").textContent=L.gen+new Date(d.generated*1000).toISOString().slice(0,10)+".";
     members();away();
-  }catch(e){$("#trustbody").innerHTML=`<div class="load">${L.statsFail}</div>`}
+  }catch(e){$("#trustbody").innerHTML=`<div class="load">loading…</div>`}
 }
 function members(){
   const el=$("#members");if(!el||!CUR)return;
