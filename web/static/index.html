@@ -347,8 +347,8 @@ en:{
   radarLabel:"Rain radar · the next hour, our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
   radarNowFrame:"Radar now", radarNowTip:"The newest radar scan, not an estimate.",
-  radarTrust:r10=>`<b>${r10}/10</b>hit`,
-  radarTrustTip:(lead,r10,d100,days)=>`+${lead} min: when this frame shows rain at a spot, it rains there ${r10} times out of 10. When it shows dry, it still rains ${d100} times out of 100. Measured against the radar over the last ${days} days.`,
+  radarTrust:pct=>`<b>${pct} %</b>reliable`,
+  radarTrustTip:(lead,pct,d100,days)=>`+${lead} min: when this frame shows rain at a spot, it rains there ${pct} % of the time. When it shows dry, it still rains ${d100} times out of 100. Measured against the radar over the last ${days} days.`,
   radarAttr:"Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
@@ -395,8 +395,8 @@ fi:{
   radarLabel:"Sadetutka · seuraava tunti, meidän arviomme", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
   radarNowFrame:"Tutka nyt", radarNowTip:"Uusin tutkakuva, ei arvio.",
-  radarTrust:r10=>`<b>${r10}/10</b>osuu`,
-  radarTrustTip:(lead,r10,d100,days)=>`+${lead} min: kun kuva näyttää sadetta jossain kohdassa, siellä sataa ${r10} kertaa kymmenestä. Kun se näyttää poutaa, sataa silti ${d100} kertaa sadasta. Mitattu tutkaa vasten viimeisten ${days} päivän ajalta.`,
+  radarTrust:pct=>`<b>${pct} %</b>luotettava`,
+  radarTrustTip:(lead,pct,d100,days)=>`+${lead} min: kun kuva näyttää sadetta jossain kohdassa, siellä sataa ${pct} % tapauksista. Kun se näyttää poutaa, sataa silti ${d100} kertaa sadasta. Mitattu tutkaa vasten viimeisten ${days} päivän ajalta.`,
   radarAttr:"Uusin tutkakuva: Ilmatieteen laitos (CC BY 4.0) · Seuraava tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
@@ -733,8 +733,8 @@ function radarTrust(){
   if(!f||!RADAR.skill||!RADAR.skill.leads.length){el.hidden=true;return}
   if(f.lead===0){el.textContent=L.radarNowFrame;el.title=L.radarNowTip;el.hidden=false;return}
   const k=RADAR.skill.leads.reduce((a,b)=>Math.abs(b.lead-f.lead)<Math.abs(a.lead-f.lead)?b:a);
-  const r10=Math.round(k.r*10);
-  el.innerHTML=L.radarTrust(r10);el.title=L.radarTrustTip(f.lead,r10,Math.round(k.d*100),RADAR.skill.days);el.hidden=false;
+  const pct=Math.round(k.r*100);
+  el.innerHTML=L.radarTrust(pct);el.title=L.radarTrustTip(f.lead,pct,Math.round(k.d*100),RADAR.skill.days);el.hidden=false;
 }
 
 /* trust strip */
