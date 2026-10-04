@@ -366,8 +366,9 @@ def city(d, mtime, lang, key):
     body = (_nav(L, lang, other) + f'<h1>{esc(L["city_h1"](name))}</h1>'
             f'<p>{esc(L["city_lead"](name, _updated(mtime, lang)))}</p>'
             f'<h2>{esc(L["leads_h"])}</h2>{table(c.get("hourly_t2m") or {})}'
-            f'<h2>{esc(L["ws_h"])}</h2>{table(c.get("hourly_ws") or {})}'
-            f'<p class="small">{esc(L["city_note"])}</p>'
+            # some stations (Oulu, Joensuu, Rovaniemi) report no wind: no table, not "not yet"
+            + (f'<h2>{esc(L["ws_h"])}</h2>{table(c["hourly_ws"])}' if c.get("hourly_ws") else "")
+            + f'<p class="small">{esc(L["city_note"])}</p>'
             f'<p><a href="{L["path"]}">{esc(L["city_back"])}</a> · <a href="{forecast}">{esc(L["city_forecast"](name))}</a></p>'
             "</main></body></html>")
     return _head(L, lang, L["city_title"](name), L["city_desc"](name), url, alts, [page, _crumbs(trail)]) + body
