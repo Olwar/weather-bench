@@ -2,16 +2,90 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/static/:path*",
-      "destination": "/web/static/:path*"
-    },
-    {
       "source": "/api/:path*",
       "destination": "http://89.167.5.149:8080/api/:path*"
     },
     {
+      "source": "/accuracy",
+      "destination": "http://89.167.5.149:8080/accuracy/"
+    },
+    {
+      "source": "/accuracy/",
+      "destination": "http://89.167.5.149:8080/accuracy/"
+    },
+    {
+      "source": "/accuracy/:city",
+      "destination": "http://89.167.5.149:8080/accuracy/:city/"
+    },
+    {
+      "source": "/accuracy/:city/",
+      "destination": "http://89.167.5.149:8080/accuracy/:city/"
+    },
+    {
+      "source": "/tarkkuus",
+      "destination": "http://89.167.5.149:8080/tarkkuus/"
+    },
+    {
+      "source": "/tarkkuus/",
+      "destination": "http://89.167.5.149:8080/tarkkuus/"
+    },
+    {
+      "source": "/tarkkuus/:city",
+      "destination": "http://89.167.5.149:8080/tarkkuus/:city/"
+    },
+    {
+      "source": "/tarkkuus/:city/",
+      "destination": "http://89.167.5.149:8080/tarkkuus/:city/"
+    }
+  ],
+  "redirects": [
+    {
       "source": "/",
-      "destination": "/web/static/index.html"
+      "has": [
+        {
+          "type": "cookie",
+          "key": "ilma_lang",
+          "value": "fi"
+        }
+      ],
+      "destination": "/fi/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "missing": [
+        {
+          "type": "cookie",
+          "key": "ilma_lang"
+        }
+      ],
+      "has": [
+        {
+          "type": "header",
+          "key": "x-vercel-ip-country",
+          "value": "FI"
+        }
+      ],
+      "destination": "/fi/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "missing": [
+        {
+          "type": "cookie",
+          "key": "ilma_lang"
+        }
+      ],
+      "has": [
+        {
+          "type": "header",
+          "key": "accept-language",
+          "value": "fi.*"
+        }
+      ],
+      "destination": "/fi/",
+      "permanent": false
     }
   ]
 }

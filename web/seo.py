@@ -260,7 +260,9 @@ def main():
                                "Nightly verification against weather stations"]},
               faq_ld(faq)]
         head = head_block(lang, h["title"], h["desc"], BASE + h["path"], home_alts, ld)
-        about = about_html(lang, h["h1"], h["intro"], faq)
+        acc = "/tarkkuus/" if lang == "fi" else "/accuracy/"
+        label = "Katso kaikki tarkkuusluvut ja menetelmä" if lang == "fi" else "See every accuracy number and the method"
+        about = about_html(lang, h["h1"], h["intro"], faq, f'<p><a href="{acc}">{label} →</a></p>')
         attrs = "" if lang == "en" else ' data-lang="fi"'
         html = page(src, T, lang, attrs, head, about)
         if lang == "en":
@@ -312,8 +314,11 @@ def main():
                   crumbs(trail), faq_ld(faq)]
             attrs = (f' data-lang="{lang}" data-city="{key}" data-lat="{lat}" data-lon="{lon}" '
                      f'data-name="{esc(name)}" data-sub="{esc(reg_fi if lang == "fi" else reg_en)}"')
+            acc = f"/tarkkuus/{key}/" if lang == "fi" else f"/accuracy/{key}/"
+            label = (f"Ennusteiden tarkkuus: {name}" if lang == "fi" else f"How accurate forecasts have been in {name}")
             write(path, page(src, T, lang, attrs, head_block(lang, title, desc, url, alts, ld),
-                             about_html(lang, h1, intro, faq), radar=(cc == "fi")))
+                             about_html(lang, h1, intro, faq, f'<p><a href="{acc}">{esc(label)} →</a></p>'),
+                             radar=(cc == "fi")))
             urls.append(url)
 
     # 3. hubs
@@ -349,6 +354,8 @@ def main():
                               about_html(lang, h["h1"], h["intro"], faq, extra)))
         urls.append(BASE + h["path"])
 
+    urls += [BASE + "/accuracy/", BASE + "/tarkkuus/"]
+    urls += [BASE + f"/accuracy/{k}/" for k in CITIES] + [BASE + f"/tarkkuus/{k}/" for k in fi_keys]
     (ROOT / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
         + "".join(f"  <url><loc>{u}</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>\n" for u in urls)
@@ -366,11 +373,15 @@ def main():
         f"- [Ennuste, suomeksi]({BASE}/fi/): mikä tahansa paikka, 7 päivää\n"
         f"- [Weather by city]({BASE}/weather/): 32 cities\n"
         f"- [Sää Suomen kaupungeissa]({BASE}/saa/): 14 kaupunkia\n\n"
+        "## Accuracy\n\n"
+        f"- [How accurate is Ilma?]({BASE}/accuracy/): head-to-head numbers against FMI, Foreca, Google and Yr, "
+        "rebuilt every night, with the method\n"
+        f"- [Kuinka tarkka Ilma on?]({BASE}/tarkkuus/): sama suomeksi\n\n"
         "## Data\n\n"
         f"- [Verification numbers, JSON]({BASE}/api/stats): nightly accuracy by source and lead day, with "
         "significance per comparison\n"
         f"- [Rain nowcast skill, JSON]({BASE}/api/nowcast/skill): hit rate of the radar nowcast by lead time\n")
-    print(f"wrote {len(urls)} pages (2 home, {len(urls) - 4} city, 2 hubs), sitemap, robots, llms.txt")
+    print(f"wrote static pages and a sitemap with {len(urls)} urls (incl. the origin-rendered accuracy pages), robots, llms.txt")
 
 
 if __name__ == "__main__":

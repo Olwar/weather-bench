@@ -28,10 +28,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from common import http_json, fmi_simple, OM_MODELS
+from web import accuracy
 
 DATA_DIR = Path(os.environ.get("WEATHERBENCH_DATA", "/opt/weather-bench/data"))
 STATIC = Path(__file__).parent / "static"
@@ -302,6 +303,49 @@ def nowcast_frame(name: str):
         raise HTTPException(404, "no such frame")
     return FileResponse(NOWCAST / name, media_type="image/png",
                         headers={"Cache-Control": "public, max-age=900"})
+
+
+# Accuracy pages, rendered per request from the nightly results so crawlers
+# that do not run JavaScript see the verified numbers (web/accuracy.py has the
+# claim rules). Vercel rewrites /accuracy/* and /tarkkuus/* here; the CDN may
+# cache them for an hour, and serve stale for a day if this origin is down.
+_RESULTS = accuracy.Results(DATA_DIR / "prospective_results.json")
+_PAGE_CACHE = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+
+
+def _results():
+    try:
+        return _RESULTS.get()
+    except FileNotFoundError:
+        raise HTTPException(503, "no scored results yet")
+
+
+@app.get("/accuracy/", response_class=HTMLResponse)
+@app.get("/accuracy", response_class=HTMLResponse, include_in_schema=False)
+def accuracy_en():
+    return HTMLResponse(accuracy.national(_results(), _RESULTS.mtime, "en"), headers={"Cache-Control": _PAGE_CACHE})
+
+
+@app.get("/tarkkuus/", response_class=HTMLResponse)
+@app.get("/tarkkuus", response_class=HTMLResponse, include_in_schema=False)
+def accuracy_fi():
+    return HTMLResponse(accuracy.national(_results(), _RESULTS.mtime, "fi"), headers={"Cache-Control": _PAGE_CACHE})
+
+
+@app.get("/accuracy/{key}/", response_class=HTMLResponse)
+@app.get("/accuracy/{key}", response_class=HTMLResponse, include_in_schema=False)
+def accuracy_city_en(key: str):
+    if not accuracy.is_city(key):
+        raise HTTPException(404, "no such city")
+    return HTMLResponse(accuracy.city(_results(), _RESULTS.mtime, "en", key), headers={"Cache-Control": _PAGE_CACHE})
+
+
+@app.get("/tarkkuus/{key}/", response_class=HTMLResponse)
+@app.get("/tarkkuus/{key}", response_class=HTMLResponse, include_in_schema=False)
+def accuracy_city_fi(key: str):
+    if key not in accuracy.FI_CITY_KEYS:
+        raise HTTPException(404, "no such city")
+    return HTMLResponse(accuracy.city(_results(), _RESULTS.mtime, "fi", key), headers={"Cache-Control": _PAGE_CACHE})
 
 
 @app.get("/api/health")

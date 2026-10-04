@@ -206,6 +206,19 @@ issues per lead are in. This is separate from `score.py` and its Holm families:
 the radar is the truth here, not the stations, and there is no inference,
 just counts.
 
+## Search and AI-answer visibility (added 2026-10-04)
+
+The app renders its numbers with JavaScript, which search and AI crawlers
+mostly do not run. So the verified claim lives in plain HTML too:
+`/accuracy/` and `/tarkkuus/` (and one page per city) are rendered by the
+origin from `prospective_results.json` on every request, CDN-cached for an
+hour, with Dataset JSON-LD pointing at `/api/stats`. `web/seo.py` writes
+every static page's head, about text and UI strings in its own language,
+plus hubs (`/saa/`, `/weather/`), a Finnish home (`/fi/`), breadcrumbs,
+hreflang with x-default, a dated sitemap and `llms.txt`. Fonts are
+self-hosted and every script-filled element has its space reserved
+(Lighthouse mobile on `/saa/helsinki/`: performance 96-98, CLS 0).
+
 ## International expansion (added 2026-08-26: SE, DK, DE, US)
 
 18 cities in four countries joined the benchmark. Verification truth outside

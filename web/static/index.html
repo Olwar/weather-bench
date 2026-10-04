@@ -347,7 +347,7 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
   <div class="inner" id="trustbody"><div class="load">loading…</div></div>
 </details>
 
-<!--about--><section class="about" id="about"><h1>Ilma – a weather forecast that shows how much to trust it</h1><p>Ilma is a weather forecast for any place on earth, seven days ahead, hour by hour. It averages six forecast models and shows the band the models fall in: a narrow band means a confident forecast, a wide one means the models disagree and you should plan for both outcomes.</p><p>The forecast's accuracy is verified every night against 14 Finnish weather stations, and the results are published on this page. The site claims to be better than a named competitor only when the difference is statistically significant.</p><div class="faq"><details><summary>What is the forecast based on?</summary><p>Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree.</p></details><details><summary>How accurate is it?</summary><p>Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant.</p></details><details><summary>Does Ilma have a rain radar?</summary><p>Yes, for Finland. The map shows the newest radar scan from the Finnish Meteorological Institute and Ilma's estimate of where the rain moves in the next hour, in 5-minute steps. Each future frame shows how often that estimate has been right over the last week.</p></details></div></section><!--/about-->
+<!--about--><section class="about" id="about"><h1>Ilma – a weather forecast that shows how much to trust it</h1><p>Ilma is a weather forecast for any place on earth, seven days ahead, hour by hour. It averages six forecast models and shows the band the models fall in: a narrow band means a confident forecast, a wide one means the models disagree and you should plan for both outcomes.</p><p>The forecast's accuracy is verified every night against 14 Finnish weather stations, and the results are published on this page. The site claims to be better than a named competitor only when the difference is statistically significant.</p><p><a href="/accuracy/">See every accuracy number and the method →</a></p><div class="faq"><details><summary>What is the forecast based on?</summary><p>Ilma averages six forecast models: ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute's edited forecast and Open-Meteo. The shaded band on the chart shows how much the models disagree.</p></details><details><summary>How accurate is it?</summary><p>Accuracy is verified every night against 14 Finnish weather stations, and the results are shown on the page. The site claims to beat a competitor only when the difference is statistically significant.</p></details><details><summary>Does Ilma have a rain radar?</summary><p>Yes, for Finland. The map shows the newest radar scan from the Finnish Meteorological Institute and Ilma's estimate of where the rain moves in the next hour, in 5-minute steps. Each future frame shows how often that estimate has been right over the last week.</p></details></div></section><!--/about-->
 <!--cities--><nav class="cities" aria-label="Cities"><div class="label">Sää Suomessa · Weather elsewhere</div><div class="row"><a href="/saa/helsinki/">Sää Helsinki</a><a href="/saa/tampere/">Sää Tampere</a><a href="/saa/oulu/">Sää Oulu</a><a href="/saa/rovaniemi/">Sää Rovaniemi</a><a href="/saa/turku/">Sää Turku</a><a href="/saa/jyvaskyla/">Sää Jyväskylä</a><a href="/saa/vaasa/">Sää Vaasa</a><a href="/saa/kuopio/">Sää Kuopio</a><a href="/saa/joensuu/">Sää Joensuu</a><a href="/saa/lappeenranta/">Sää Lappeenranta</a><a href="/saa/pori/">Sää Pori</a><a href="/saa/kajaani/">Sää Kajaani</a><a href="/saa/sodankyla/">Sää Sodankylä</a><a href="/saa/mariehamn/">Sää Maarianhamina</a></div><div class="row"><a href="/weather/stockholm/">Stockholm weather</a><a href="/weather/goteborg/">Göteborg weather</a><a href="/weather/malmo/">Malmö weather</a><a href="/weather/lulea/">Luleå weather</a><a href="/weather/kobenhavn/">Copenhagen weather</a><a href="/weather/aarhus/">Aarhus weather</a><a href="/weather/aalborg/">Aalborg weather</a><a href="/weather/berlin/">Berlin weather</a><a href="/weather/hamburg/">Hamburg weather</a><a href="/weather/munchen/">Munich weather</a><a href="/weather/frankfurt/">Frankfurt weather</a><a href="/weather/koln/">Cologne weather</a><a href="/weather/newyork/">New York weather</a><a href="/weather/chicago/">Chicago weather</a><a href="/weather/houston/">Houston weather</a><a href="/weather/denver/">Denver weather</a><a href="/weather/seattle/">Seattle weather</a><a href="/weather/miami/">Miami weather</a></div></nav><!--/cities-->
 <footer>
   <div><span id="footerTxt">Ilma averages six forecast models — ECMWF AIFS and its ensemble, ECMWF IFS, MET Nordic, the Finnish Meteorological Institute and Open-Meteo — and verifies the result against 14 Finnish weather stations.</span> <span id="gen"></span></div>
@@ -380,7 +380,8 @@ en:{
   c:{rain:"Rain",drizzle:"Light rain",clear:"Clear",clearNight:"Clear night",cloudy:"Cloudy",partly:"Partly cloudy",sunny:"Sunny"},
   defaultSub:"Uusimaa, Finland",
   beatFmi:"the Finnish Meteorological Institute's meteorologists", beatBest:"the best single model",
-  headAll:"This forecast has been <b>more accurate than everything we compare it to</b> — Foreca, the Finnish Meteorological Institute's meteorologists and every model it uses",
+  headAll:"This forecast has been <b>more accurate</b> than Foreca, the Finnish Meteorological Institute's meteorologists and every model it uses",
+  fullRes:"Full results and method", fullUrl:"/accuracy/",
   headSome:list=>`This forecast has been <b>more accurate</b> than ${list}`, and:" and ",
   day:l=>`Day ${l}`,
   h4members:"What each model says right now",
@@ -428,7 +429,8 @@ fi:{
   c:{rain:"Sadetta",drizzle:"Heikkoa sadetta",clear:"Selkeää",clearNight:"Selkeä yö",cloudy:"Pilvistä",partly:"Puolipilvistä",sunny:"Aurinkoista"},
   defaultSub:"Uusimaa, Suomi",
   beatFmi:"Ilmatieteen laitoksen meteorologit", beatBest:"paras yksittäinen malli",
-  headAll:"Tämä ennuste on ollut <b>tarkempi kuin kaikki, mihin sitä vertaamme</b> — Foreca, Ilmatieteen laitoksen meteorologit ja jokainen sen käyttämä malli",
+  headAll:"Tämä ennuste on ollut <b>tarkempi</b> kuin Foreca, Ilmatieteen laitoksen meteorologit ja jokainen sen käyttämä malli",
+  fullRes:"Koko tulokset ja menetelmä", fullUrl:"/tarkkuus/",
   headSome:list=>`Tämä ennuste on ollut <b>tarkempi</b> kuin ${list}`, and:" ja ",
   day:l=>`Päivä ${l}`,
   h4members:"Mitä kukin malli sanoo juuri nyt",
@@ -478,6 +480,8 @@ function applyStatic(){
 document.querySelectorAll("#lang button").forEach(b=>b.addEventListener("click",()=>{
   if(b.dataset.l===LANG)return;
   LANG=b.dataset.l;L=I18N[LANG];localStorage.setItem("ilma_lang",LANG);
+  /* the edge reads this to decide whether "/" opens in Finnish (vercel.json) */
+  document.cookie=`ilma_lang=${LANG}; path=/; max-age=31536000; samesite=lax`;
   applyStatic();
   $("#trusthead").textContent=L.trustHead;
   if(CUR)paint();
@@ -859,7 +863,7 @@ async function evidence(){
       <div id="boards">${boards("fi")}</div>
       <div class="fine">${c&&c.ci95?L.fine(c.days,c.n.toLocaleString(L.locale),
         (window._BEAT||[]).map(b=>`${b.label} (−${b.pct} %)`).join(", ")):""}
-        ${L.honesty}</div>`;
+        ${L.honesty} <a href="${L.fullUrl}" style="color:inherit">${L.fullRes} →</a></div>`;
     document.querySelectorAll(".scope button").forEach(b=>b.onclick=()=>{
       document.querySelectorAll(".scope button").forEach(x=>x.classList.toggle("on",x===b));
       $("#boards").innerHTML=boards(b.dataset.sc);members();});
