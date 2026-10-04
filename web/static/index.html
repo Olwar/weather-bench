@@ -460,6 +460,10 @@ fi:{
   locale:"fi"
 }};
 const PAGE=document.documentElement.dataset;  /* set by web/seo.py on city landing pages */
+/* a choice stored before the edge read cookies must also reach the edge, or a
+   Finnish IP would override it (vercel.json); never set for people who never chose */
+try{const st=localStorage.getItem("ilma_lang");
+  if(st&&!/(?:^|; )ilma_lang=/.test(document.cookie))document.cookie=`ilma_lang=${st}; path=/; max-age=31536000; samesite=lax`}catch(e){}
 let LANG=PAGE.lang||localStorage.getItem("ilma_lang")||"en";
 if(!I18N[LANG])LANG="en";
 let L=I18N[LANG];

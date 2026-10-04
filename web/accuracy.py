@@ -40,7 +40,8 @@ T = {
              "the Finnish Meteorological Institute, Foreca, Google and Yr. Matched hours, statistical tests, all numbers.",
         h1="How accurate is Ilma's forecast?",
         lead=lambda days, n, upd: (f"Measured over the last {days} days at 14 Finnish weather stations, for forecasts "
-                                   f"1–7 days ahead: {n} matched hourly comparisons per competitor. Updated {upd}."),
+                                   f"1–7 days ahead: {n} matched forecast hours against the Finnish Meteorological "
+                                   f"Institute. The table shows how many days each comparison covers. Updated {upd}."),
         names={"blend_open": "Ilma", "fmi_edited": "Finnish Meteorological Institute (FMI)", "foreca": "Foreca",
                "google_weather": "Google", "yr": "Yr", "ecmwf_aifs025_single": "ECMWF AIFS (best single model)",
                "ecmwf_ifs025": "ECMWF IFS", "ecmwf_aifs_ens_mean": "AIFS ensemble", "best_match": "Open-Meteo",
@@ -87,8 +88,8 @@ T = {
              "laitoksen, Forecan, Googlen ja Yr:n kanssa. Samat tunnit, tilastolliset testit, kaikki luvut.",
         h1="Kuinka tarkka Ilman ennuste on?",
         lead=lambda days, n, upd: (f"Mitattu viimeisten {days} päivän ajalta 14 suomalaisella sääasemalla, ennusteille "
-                                   f"1–7 päivää eteenpäin: {n} tunneittaista vertailua kutakin kilpailijaa vastaan. "
-                                   f"Päivitetty {upd}."),
+                                   f"1–7 päivää eteenpäin: {n} verrattua ennustetuntia Ilmatieteen laitosta vastaan. "
+                                   f"Taulukko näyttää, kuinka monta päivää kukin vertailu kattaa. Päivitetty {upd}."),
         names={"blend_open": "Ilma", "fmi_edited": "Ilmatieteen laitos", "foreca": "Foreca", "google_weather": "Google",
                "yr": "Yr", "ecmwf_aifs025_single": "ECMWF AIFS (paras yksittäinen malli)", "ecmwf_ifs025": "ECMWF IFS",
                "ecmwf_aifs_ens_mean": "AIFS-parvi", "best_match": "Open-Meteo", "metno_nordic": "MET Nordic",
