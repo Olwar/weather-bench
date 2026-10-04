@@ -809,8 +809,14 @@ def main():
     foreign = sorted(k for k in COUNTRY_CITIES if k != "fi")
 
     fi = {"fi": FI_CITIES}
-    t2m_h = _MAE({**scopes, "fi_q": FI_CITIES}, quantized={"fi_q"})
-    ws_h, rain_amt_h, cc_h = _MAE(scopes), _MAE(scopes), _MAE(scopes)
+    # One single-city scope per city for temperature and wind: descriptive
+    # per-city boards for the site's per-city accuracy pages. They ride the
+    # same walk (no extra scan) and carry no inference - the tested claims
+    # stay the Finland-wide pairwise families.
+    city_scopes = {f"city:{c}": {c} for c in sorted(ALL_CITIES)}
+    t2m_h = _MAE({**scopes, "fi_q": FI_CITIES, **city_scopes}, quantized={"fi_q"})
+    ws_h = _MAE({**scopes, **city_scopes})
+    rain_amt_h, cc_h = _MAE(scopes), _MAE(scopes)
     # Extended exploratory boards (collection began 2026-08-22; they stay empty
     # until forecast/observation overlap accrues, and _MAE copes).
     ext_h = {v: _MAE(fi) for v in ("rh", "td", "gust", "pmsl")}
@@ -883,6 +889,10 @@ def main():
         }
         for cc in foreign
     }
+    def _first_week(board):
+        return {src: {lead: c for lead, c in leads.items() if int(lead) <= 7} for src, leads in board.items()}
+    cities = {k.split(":", 1)[1]: {"hourly_t2m": _first_week(t2m_all[k]), "hourly_ws": _first_week(ws_all[k])}
+              for k in city_scopes}
     scope_boards = {
         name: {
             "hourly_t2m": t2m_all[name],
@@ -927,6 +937,7 @@ def main():
         **{f"hourly_{v}": extended[v] for v in extended},
         "wind_direction": wdir, "cloud_classes": cloud_cls,
         "countries": countries,
+        "cities": cities,
         "pairwise_t2m": {f"{a}__vs__{b}": v for (a, b), v in pairs.items()},
         "pairwise_t2m_blends_exploratory": {
             f"{a}__vs__{b}": v for (a, b), v in blend_pairs.items()},
