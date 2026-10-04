@@ -347,7 +347,8 @@ en:{
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
   radarLabel:"Rain radar · the next hour, our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
-  radarSkill:(d,rows)=>`<i>How good is the estimate?</i> Checked against the radar itself over the last ${d} days, rain yes or no in 2 km cells (hit rate CSI, higher is better; in brackets: keeping the newest scan still): `+rows.map(r=>`+${r.lead} min <b>${r.now}</b> (${r.keep})`).join(" · ")+`.`,
+  radarNowFrame:"This is the newest radar scan, not an estimate.",
+  radarTrust:(lead,r10,d100,days)=>`<i>How much to trust the +${lead} min frame:</i> when it shows rain at a spot, it rains there <b>${r10} times out of 10</b>. When it shows dry, it still rains <b>${d100} times out of 100</b>. Measured against the radar over the last ${days} days.`,
   radarAttr:"Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
@@ -393,7 +394,8 @@ fi:{
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
   radarLabel:"Sadetutka · seuraava tunti, meidän arviomme", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
-  radarSkill:(d,rows)=>`<i>Kuinka hyvä arvio on?</i> Verrattu tutkaan itseensä viimeisten ${d} päivän ajalta, sataako vai ei 2 km ruuduissa (osuvuus CSI, suurempi on parempi; suluissa: jos uusin tutkakuva pidettäisiin paikallaan): `+rows.map(r=>`+${r.lead} min <b>${r.now}</b> (${r.keep})`).join(" · ")+`.`,
+  radarNowFrame:"Tämä on uusin tutkakuva, ei arvio.",
+  radarTrust:(lead,r10,d100,days)=>`<i>Kuinka paljon +${lead} min kuvaan voi luottaa:</i> kun se näyttää sadetta jossain kohdassa, siellä sataa <b>${r10} kertaa kymmenestä</b>. Kun se näyttää poutaa, sataa silti <b>${d100} kertaa sadasta</b>. Mitattu tutkaa vasten viimeisten ${days} päivän ajalta.`,
   radarAttr:"Uusin tutkakuva: Ilmatieteen laitos (CC BY 4.0) · Seuraava tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
@@ -445,7 +447,7 @@ function applyStatic(){
   $("#radarLabel").textContent=L.radarLabel;$("#radarAttr").textContent=L.radarAttr;
   $("#radarLegend").innerHTML=[["#6ECDEB",0],["#28965A",1],["#E6461E",2]].map(([c,i])=>`<span class="lg"><i style="background:${c}"></i>${L.radarLegend[i]}</span>`).join(" ");
   if(window._radarSync)window._radarSync();
-  if(RADAR.skill)radarSkill();
+  if(RADAR.skill)radarTrust();
   $("#twoWeeks").textContent=L.twoWeeks;
   $("#trustmeta").textContent=L.trustMeta;
   $("#footerTxt").textContent=L.footer;
@@ -659,6 +661,7 @@ function radarShow(i){
   el.classList.toggle("live",f.lead===0);
   el.classList.toggle("est",f.lead>0);el.dataset.est=L.radarEst;
   $("#radarSlider").value=i;
+  if(RADAR.skill)radarTrust();
 }
 function radarStop(){clearInterval(RADAR.timer);RADAR.timer=null;$("#radarPlay").textContent="▶";$("#radarPlay").setAttribute("aria-label",L.radarPlay)}
 function radarPlay(){
@@ -713,16 +716,23 @@ async function radar(){
 }
 window._radarSync=()=>{if(RADAR.frames.length&&RADAR.map)radarShow(RADAR.idx)};
 async function radarSkill(){
-  const el=$("#radarSkill");
   try{
-    const r=await fetch("/api/nowcast/skill");if(!r.ok){el.hidden=true;return}
-    const d=await r.json();RADAR.skill=d;
-    const w=(d.windows["7d"]&&Object.keys(d.windows["7d"]).length)?"7d":"30d";
-    const rows=Object.entries(d.windows[w]||{}).filter(([l,c])=>c.n_issues>=48&&["30","60","120"].includes(l))
-      .map(([l,c])=>({lead:l,now:(c["thr_0.1"].nowcast.csi??0).toFixed(2),keep:(c["thr_0.1"].persistence.csi??0).toFixed(2)}));
-    if(rows.length<2){el.hidden=true;return}
-    el.innerHTML=L.radarSkill(w==="7d"?7:30,rows);el.hidden=false;
-  }catch(e){el.hidden=true}
+    const r=await fetch("/api/nowcast/skill");if(!r.ok){RADAR.skill=null;return}
+    const d=await r.json();
+    const w=(d.windows["7d"]&&Object.keys(d.windows["7d"]).length>=3)?"7d":"30d";
+    RADAR.skill={days:w==="7d"?7:30,leads:Object.entries(d.windows[w]||{})
+      .filter(([l,c])=>c.n_issues>=48&&c["thr_0.1"].nowcast.p_rain_if_rain!=null)
+      .map(([l,c])=>({lead:+l,r:c["thr_0.1"].nowcast.p_rain_if_rain,d:c["thr_0.1"].nowcast.p_rain_if_dry}))};
+    radarTrust();
+  }catch(e){RADAR.skill=null;$("#radarSkill").hidden=true}
+}
+/* one plain sentence for the frame on screen: nearest verified lead */
+function radarTrust(){
+  const el=$("#radarSkill"),f=RADAR.frames[RADAR.idx];
+  if(!f||!RADAR.skill||!RADAR.skill.leads.length){el.hidden=true;return}
+  if(f.lead===0){el.textContent=L.radarNowFrame;el.hidden=false;return}
+  const k=RADAR.skill.leads.reduce((a,b)=>Math.abs(b.lead-f.lead)<Math.abs(a.lead-f.lead)?b:a);
+  el.innerHTML=L.radarTrust(f.lead,Math.round(k.r*10),Math.round(k.d*100),RADAR.skill.days);el.hidden=false;
 }
 
 /* trust strip */

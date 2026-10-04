@@ -257,10 +257,17 @@ def verify(now: datetime) -> int:
 
 
 def _scores(c: dict) -> dict:
-    h, m, fa = c["hit"], c["miss"], c["fa"]
+    """Skill scores plus the two numbers a person at one spot cares about:
+    how often it rains when the map says rain there, and how often it rains
+    anyway when the map says dry."""
+    h, m, fa, cn = c["hit"], c["miss"], c["fa"], c["cn"]
+    n = h + m + fa + cn
     return {"csi": round(h / (h + m + fa), 3) if h + m + fa else None,
             "pod": round(h / (h + m), 3) if h + m else None,
-            "far": round(fa / (h + fa), 3) if h + fa else None}
+            "far": round(fa / (h + fa), 3) if h + fa else None,
+            "p_rain_if_rain": round(h / (h + fa), 3) if h + fa else None,
+            "p_rain_if_dry": round(m / (m + cn), 3) if m + cn else None,
+            "base_rate": round((h + m) / n, 4) if n else None}
 
 
 def skill(now: datetime):
