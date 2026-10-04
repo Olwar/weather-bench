@@ -150,9 +150,9 @@ nav{display:flex;align-items:center;gap:22px;padding:22px 0 0;flex-wrap:wrap;pos
 .radar-foot .lg{display:inline-flex;align-items:center;gap:6px}
 .radar-foot .lg i{display:inline-block;width:14px;height:8px;border-radius:2px}
 .radar .load{padding:0}
-.radar-skill{margin-top:14px;font-size:13px;line-height:1.7;color:var(--ink-2);max-width:72ch}
-.radar-skill b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
-.radar-skill i{font-family:var(--display);font-style:italic}
+.radar-wrap{position:relative}
+.radar-trust{position:absolute;left:12px;top:12px;z-index:5;background:var(--ink);color:var(--paper);border-radius:99px;padding:6px 12px;font-size:13px;line-height:1.2;font-variant-numeric:tabular-nums;cursor:help;box-shadow:0 6px 16px -8px rgba(24,21,19,.5)}
+.radar-trust b{font-family:var(--display);font-size:15px;font-weight:400;margin-right:5px}
 
 /* ═══ sections ═══ */
 section{padding:clamp(26px,4.5vw,44px) 0 0}
@@ -299,13 +299,12 @@ footer{padding:34px 0 128px;font-size:13px;color:var(--ink-3);line-height:1.9}
     <div class="label" id="radarLabel">Rain radar · last 2 hours</div>
     <div class="radar-ctl"><button id="radarPlay" aria-label="Play">▶</button><span class="rtime" id="radarTime">–</span></div>
   </div>
-  <div class="radar-map" id="radarMap"><div class="load">loading…</div></div>
+  <div class="radar-wrap"><div class="radar-map" id="radarMap"><div class="load">loading…</div></div><div class="radar-trust" id="radarTrust" hidden></div></div>
   <input type="range" id="radarSlider" min="0" max="12" value="0" step="1" aria-label="Radar frame">
   <div class="radar-foot">
     <span id="radarLegend"></span>
     <span id="radarAttr">Radar: Finnish Meteorological Institute (CC BY 4.0) · Map: OpenFreeMap, © OpenStreetMap contributors</span>
   </div>
-  <div class="radar-skill" id="radarSkill" hidden></div>
 </section>
 
 <section>
@@ -347,8 +346,9 @@ en:{
   chartLabel:"Next 7 days · the shaded band shows how much the models disagree",
   radarLabel:"Rain radar · the next hour, our estimate", radarPlay:"Play", radarPause:"Pause", radarNow:"latest", radarEst:"estimate",
   radarLegend:["light","moderate","heavy"],
-  radarNowFrame:"This is the newest radar scan, not an estimate.",
-  radarTrust:(lead,r10,d100,days)=>`<i>How much to trust the +${lead} min frame:</i> when it shows rain at a spot, it rains there <b>${r10} times out of 10</b>. When it shows dry, it still rains <b>${d100} times out of 100</b>. Measured against the radar over the last ${days} days.`,
+  radarNowFrame:"Radar now", radarNowTip:"The newest radar scan, not an estimate.",
+  radarTrust:r10=>`<b>${r10}/10</b>hit`,
+  radarTrustTip:(lead,r10,d100,days)=>`+${lead} min: when this frame shows rain at a spot, it rains there ${r10} times out of 10. When it shows dry, it still rains ${d100} times out of 100. Measured against the radar over the last ${days} days.`,
   radarAttr:"Newest scan: Finnish Meteorological Institute radar (CC BY 4.0) · Next hour: Ilma's motion estimate · Map: OpenFreeMap, © OpenStreetMap contributors",
   loading:"loading…", twoWeeks:"Two weeks",
   trustHead:"Why trust this forecast?",
@@ -394,8 +394,9 @@ fi:{
   chartLabel:"Seuraavat 7 päivää · varjostettu alue näyttää, kuinka paljon mallit ovat eri mieltä",
   radarLabel:"Sadetutka · seuraava tunti, meidän arviomme", radarPlay:"Toista", radarPause:"Pysäytä", radarNow:"uusin", radarEst:"arvio",
   radarLegend:["heikkoa","kohtalaista","rankkaa"],
-  radarNowFrame:"Tämä on uusin tutkakuva, ei arvio.",
-  radarTrust:(lead,r10,d100,days)=>`<i>Kuinka paljon +${lead} min kuvaan voi luottaa:</i> kun se näyttää sadetta jossain kohdassa, siellä sataa <b>${r10} kertaa kymmenestä</b>. Kun se näyttää poutaa, sataa silti <b>${d100} kertaa sadasta</b>. Mitattu tutkaa vasten viimeisten ${days} päivän ajalta.`,
+  radarNowFrame:"Tutka nyt", radarNowTip:"Uusin tutkakuva, ei arvio.",
+  radarTrust:r10=>`<b>${r10}/10</b>osuu`,
+  radarTrustTip:(lead,r10,d100,days)=>`+${lead} min: kun kuva näyttää sadetta jossain kohdassa, siellä sataa ${r10} kertaa kymmenestä. Kun se näyttää poutaa, sataa silti ${d100} kertaa sadasta. Mitattu tutkaa vasten viimeisten ${days} päivän ajalta.`,
   radarAttr:"Uusin tutkakuva: Ilmatieteen laitos (CC BY 4.0) · Seuraava tunti: Ilman liikearvio · Kartta: OpenFreeMap, © OpenStreetMapin tekijät",
   loading:"ladataan…", twoWeeks:"Kaksi viikkoa",
   trustHead:"Miksi luottaa tähän ennusteeseen?",
@@ -724,15 +725,16 @@ async function radarSkill(){
       .filter(([l,c])=>c.n_issues>=48&&c["thr_0.1"].nowcast.p_rain_if_rain!=null)
       .map(([l,c])=>({lead:+l,r:c["thr_0.1"].nowcast.p_rain_if_rain,d:c["thr_0.1"].nowcast.p_rain_if_dry}))};
     radarTrust();
-  }catch(e){RADAR.skill=null;$("#radarSkill").hidden=true}
+  }catch(e){RADAR.skill=null;$("#radarTrust").hidden=true}
 }
-/* one plain sentence for the frame on screen: nearest verified lead */
+/* two words in the map corner for the frame on screen, the long version as a tooltip */
 function radarTrust(){
-  const el=$("#radarSkill"),f=RADAR.frames[RADAR.idx];
+  const el=$("#radarTrust"),f=RADAR.frames[RADAR.idx];
   if(!f||!RADAR.skill||!RADAR.skill.leads.length){el.hidden=true;return}
-  if(f.lead===0){el.textContent=L.radarNowFrame;el.hidden=false;return}
+  if(f.lead===0){el.textContent=L.radarNowFrame;el.title=L.radarNowTip;el.hidden=false;return}
   const k=RADAR.skill.leads.reduce((a,b)=>Math.abs(b.lead-f.lead)<Math.abs(a.lead-f.lead)?b:a);
-  el.innerHTML=L.radarTrust(f.lead,Math.round(k.r*10),Math.round(k.d*100),RADAR.skill.days);el.hidden=false;
+  const r10=Math.round(k.r*10);
+  el.innerHTML=L.radarTrust(r10);el.title=L.radarTrustTip(f.lead,r10,Math.round(k.d*100),RADAR.skill.days);el.hidden=false;
 }
 
 /* trust strip */
